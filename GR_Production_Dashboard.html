@@ -133,7 +133,7 @@
   }
   .filter-group{position:relative;}
   .filter-label{
-    font-family:var(--mono);font-size:10.5px;color:#aeb6c7;
+    font-family:var(--mono);font-size:10.5px;color:var(--text);
     letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:block;font-weight:600;
   }
   .filter-btn{
@@ -365,7 +365,8 @@
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
     padding:16px 18px;margin-bottom:20px;
   }
-  .prod-dept-select{width:100%;min-width:160px;}
+  .prod-dept-select{width:100%;min-width:160px;color:var(--text);}
+  .prod-dept-select option{color:var(--text);background:var(--surface-2);}
   .prod-list{display:flex;flex-direction:column;gap:8px;}
   .prod-row{
     display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
@@ -408,7 +409,7 @@
   }
   .ss-panel.open{display:block;}
   .ss-option{
-    padding:8px 10px;border-radius:6px;font-size:12.8px;color:var(--text-dim);
+    padding:8px 10px;border-radius:6px;font-size:12.8px;color:var(--text);
     cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
   .ss-option:hover, .ss-option.highlight{background:var(--surface);color:var(--text);}
@@ -1032,13 +1033,13 @@ document.querySelectorAll('.filter-btn').forEach(btn=>{
     const targetId = btn.getAttribute('data-target');
     const panel = document.getElementById(targetId);
     const wasOpen = panel.classList.contains('open');
-    document.querySelectorAll('.filter-panel').forEach(p=>p.classList.remove('open'));
+    document.querySelectorAll('.filter-panel:not(.ss-panel)').forEach(p=>p.classList.remove('open'));
     document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('open'));
     if(!wasOpen){ panel.classList.add('open'); btn.classList.add('open'); }
   });
 });
 document.addEventListener('click', ()=>{
-  document.querySelectorAll('.filter-panel').forEach(p=>p.classList.remove('open'));
+  document.querySelectorAll('.filter-panel:not(.ss-panel)').forEach(p=>p.classList.remove('open'));
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('open'));
 });
 document.querySelectorAll('.filter-panel').forEach(p=>p.addEventListener('click', e=>e.stopPropagation()));
