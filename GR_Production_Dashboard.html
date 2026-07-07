@@ -380,9 +380,9 @@
   }
   .prod-material{font-size:13.5px;color:var(--text);line-height:1.5;}
   .prod-row-meta{display:flex;align-items:center;gap:14px;flex-shrink:0;}
-  .prod-dept-pill{
-    font-size:11px;font-family:var(--mono);color:var(--text-dim);
-    background:var(--surface-2);border:1px solid var(--border);padding:4px 11px;border-radius:999px;
+ .prod-dept-pill{
+    font-size:11px;font-family:var(--mono);font-weight:600;
+    padding:4px 11px;border-radius:999px;border:1px solid transparent;
     white-space:nowrap;
   }
   .prod-target{font-family:var(--mono);font-size:14px;color:var(--text);white-space:nowrap;}
@@ -949,7 +949,32 @@ setupSearchableSelect({
   inputId:'prodSearchMaterial', panelId:'ssMaterialPanel', clearId:'ssMaterialClear', stateKey:'materialQuery',
   getOptions: ()=>[...new Set(groupedProduction.map(r=>r.material))].filter(Boolean).sort()
 });
-
+// สีของป้ายหน่วยงาน — กำหนดตายตัวสำหรับหน่วยงานหลัก ที่เหลือสุ่มจากชุดสีสำรองแบบ deterministic
+const DEPT_COLORS = {
+  'ตัดยาง':          {bg:'rgba(63,169,245,0.16)',  text:'#7cc4f8', border:'rgba(63,169,245,0.45)'},
+  'เจียร์':           {bg:'rgba(167,139,250,0.16)', text:'#b9a3fb', border:'rgba(167,139,250,0.45)'},
+  'เจียร์(หยาบ)':      {bg:'rgba(251,146,60,0.16)',  text:'#fdb673', border:'rgba(251,146,60,0.45)'},
+  'เจียร์(ละเอียด)':   {bg:'rgba(52,211,153,0.16)',  text:'#7ee8bf', border:'rgba(52,211,153,0.45)'},
+  'ทากาว':           {bg:'rgba(244,114,182,0.16)', text:'#f79cc6', border:'rgba(244,114,182,0.45)'},
+  'ปั๊ม':             {bg:'rgba(250,204,21,0.16)',  text:'#f7d84f', border:'rgba(250,204,21,0.45)'},
+  'เปเปอร์':          {bg:'rgba(45,212,191,0.16)',  text:'#7fe8dc', border:'rgba(45,212,191,0.45)'},
+  'ใส่ท่อ':           {bg:'rgba(248,113,113,0.16)', text:'#faa0a0', border:'rgba(248,113,113,0.45)'},
+  'เจาะ':             {bg:'rgba(129,140,248,0.16)', text:'#a5adf9', border:'rgba(129,140,248,0.45)'},
+  'รีด':              {bg:'rgba(232,121,249,0.16)', text:'#f0a8fa', border:'rgba(232,121,249,0.45)'},
+};
+const DEPT_COLOR_FALLBACK = [
+  {bg:'rgba(148,163,184,0.16)', text:'#c3ccd8', border:'rgba(148,163,184,0.45)'},
+  {bg:'rgba(74,222,128,0.16)',  text:'#93efb2', border:'rgba(74,222,128,0.45)'},
+  {bg:'rgba(96,165,250,0.16)',  text:'#a3c9fb', border:'rgba(96,165,250,0.45)'},
+];
+function getDeptColor(dept){
+  if(!dept) return DEPT_COLOR_FALLBACK[0];
+  if(DEPT_COLORS[dept]) return DEPT_COLORS[dept];
+  // หน่วยงานที่ไม่ได้ระบุไว้ล่วงหน้า: สุ่มสีแบบคงที่ตามชื่อ (ชื่อเดิมได้สีเดิมเสมอ)
+  let hash = 0;
+  for(let i=0;i<dept.length;i++) hash = (hash * 31 + dept.charCodeAt(i)) >>> 0;
+  return DEPT_COLOR_FALLBACK[hash % DEPT_COLOR_FALLBACK.length];
+}
 function renderProduction(){
   const listEl = document.getElementById('prodList');
   const countEl = document.getElementById('prodResultCount');
@@ -976,7 +1001,7 @@ function renderProduction(){
         <div class="prod-material">${row.material}</div>
       </div>
       <div class="prod-row-meta">
-        <span class="prod-dept-pill">${row.dept}</span>
+       <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
         <span class="prod-target">เป้าหมาย <b>${row.target_100!=null ? fmtNum(row.target_100) : '—'}</b> ชิ้น/ชม.</span>
       </div>
     </div>
