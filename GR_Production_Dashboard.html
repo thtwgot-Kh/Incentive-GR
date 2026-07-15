@@ -1115,6 +1115,10 @@ function fmtBaht(n){
   if(n===null||n===undefined||isNaN(n)) return '—';
   return Number(n).toLocaleString('en-US',{maximumFractionDigits:0})+' ฿';
 }
+function computedAchvPct(r){
+  if(r.required_pcs==null || r.required_pcs===0 || r.actual_pcs==null) return null;
+  return (r.actual_pcs / r.required_pcs) * 100;
+}
 
 // ---------- charts ----------
 let charts = {};
@@ -1165,8 +1169,10 @@ function renderKPIs(data){
   const totalValue = data.reduce((s,r)=>s+(r.value_baht||0),0);
   const totalExcess = data.reduce((s,r)=>s+(r.excess_baht||0),0);
   const totalDefects = data.reduce((s,r)=>s+(r.defects||0),0);
-  const achvRows = data.filter(r=>r.achv_pct!==null && isFinite(r.achv_pct));
-  const avgAchv = achvRows.length ? achvRows.reduce((s,r)=>s+r.achv_pct,0)/achvRows.length : 0;
+  const achvRows = data.filter(r => r.required_pcs != null && r.required_pcs !== 0 && r.actual_pcs != null);
+  const sumActualForAchv = achvRows.reduce((s,r)=>s+r.actual_pcs, 0);
+  const sumRequiredForAchv = achvRows.reduce((s,r)=>s+r.required_pcs, 0);
+  const avgAchv = sumRequiredForAchv ? (sumActualForAchv / sumRequiredForAchv) * 100 : 0;
   const activeEmployees = new Set(data.map(r=>r.employee).filter(Boolean)).size;
   const totalHours = data.reduce((s,r)=>s+(r.work_hours||0),0);
 
@@ -1194,7 +1200,7 @@ function renderTrendChart(data){
     if(!r.date_iso) return;
     if(!byDate[r.date_iso]) byDate[r.date_iso] = {actual:0, target:0};
     byDate[r.date_iso].actual += (r.actual_pcs||0);
-    byDate[r.date_iso].target += (r.target_100||0);
+    byDate[r.date_iso].target += (r.required_pcs||0);
   });
   const dates = Object.keys(byDate).sort();
   destroyChart('trendChart');
@@ -1205,7 +1211,7 @@ function renderTrendChart(data){
       labels: dates,
       datasets:[
         {label:'ผลิตจริง', data:dates.map(d=>byDate[d].actual), borderColor:'#e8792b', backgroundColor:'#e8792b22', fill:true, tension:.3, pointRadius:2},
-        {label:'เป้าหมาย 100%', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
+        {label:'เป้าหมาย (ปรับตามชั่วโมง)', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
       ]
     },
     options:{
@@ -1276,12 +1282,14 @@ function renderIncentiveChart(data){
 function renderGaugeList(data){
   const byEmp = {};
   data.forEach(r=>{
-    if(!r.employee || r.achv_pct===null || !isFinite(r.achv_pct)) return;
-    if(!byEmp[r.employee]) byEmp[r.employee] = {sum:0,n:0};
-    byEmp[r.employee].sum += r.achv_pct;
-    byEmp[r.employee].n += 1;
+    if(!r.employee || r.required_pcs == null || r.required_pcs === 0 || r.actual_pcs == null) return;
+    if(!byEmp[r.employee]) byEmp[r.employee] = {actual:0, required:0};
+    byEmp[r.employee].actual += r.actual_pcs;
+    byEmp[r.employee].required += r.required_pcs;
   });
-  const entries = Object.entries(byEmp).map(([emp,v])=>[emp, v.sum/v.n]).sort((a,b)=>b[1]-a[1]);
+  const entries = Object.entries(byEmp)
+    .map(([emp,v]) => [emp, v.required ? (v.actual / v.required) * 100 : 0])
+    .sort((a,b)=>b[1]-a[1]);
   const maxVal = Math.max(100, ...entries.map(e=>e[1]));
   const list = document.getElementById('gaugeList');
   if(entries.length===0){ list.innerHTML = `<div class="empty-state">ไม่มีข้อมูล</div>`; return; }
@@ -1355,7 +1363,8 @@ function renderDefectChart(data){
 
 function renderTable(data){
   const sorted = [...data].sort((a,b)=>{
-    let av = a[state.sortKey], bv = b[state.sortKey];
+    let av = state.sortKey==='achv_pct' ? computedAchvPct(a) : a[state.sortKey];
+    let bv = state.sortKey==='achv_pct' ? computedAchvPct(b) : b[state.sortKey];
     if(av===null||av===undefined) av = state.sortDir>0 ? Infinity : -Infinity;
     if(bv===null||bv===undefined) bv = state.sortDir>0 ? Infinity : -Infinity;
     if(typeof av === 'string') return av.localeCompare(bv) * state.sortDir;
@@ -1368,7 +1377,8 @@ function renderTable(data){
   const pageRows = sorted.slice(startIdx, startIdx+state.pageSize);
 
   document.getElementById('tableBody').innerHTML = pageRows.map(r=>{
-    const achvClass = (r.achv_pct!==null && r.achv_pct>=100) ? 'good':'bad';
+    const achv = computedAchvPct(r);
+    const achvClass = (achv!==null && achv>=100) ? 'good':'bad';
     const excessClass = (r.excess_baht!==null && r.excess_baht>=0) ? 'good':'bad';
     return `<tr>
       <td class="mono">${r.date_iso||'—'}</td>
@@ -1378,7 +1388,7 @@ function renderTable(data){
       <td>${r.employee||'—'}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
-      <td class="num"><span class="pill ${achvClass}">${r.achv_pct!==null?r.achv_pct.toFixed(1)+'%':'—'}</span></td>
+      <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
       <td class="num mono">${fmtNum(r.defects)}</td>
       <td class="num"><span class="pill ${excessClass}">${fmtBaht(r.excess_baht)}</span></td>
     </tr>`;
