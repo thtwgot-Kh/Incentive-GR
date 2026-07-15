@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  try{
+    var CURRENT_LANG='tw';
+    var LANG_FILES={th:'GR_Production_Dashboard.html', tw:'GR_Production_Dashboard_TW.html', mm:'GR_Production_Dashboard_MM.html'};
+    var pref = localStorage.getItem('gr_lang');
+    if(pref && LANG_FILES[pref] && pref!==CURRENT_LANG){
+      location.replace(LANG_FILES[pref]);
+    }
+  }catch(e){}
+})();
+</script>
 <title>生產儀表板 — Production Line Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -321,6 +333,13 @@
   .lang-btn:hover{color:var(--text);border-color:var(--accent);}
   .lang-btn.active{background:var(--accent);border-color:var(--accent);color:#1a1108;}
   .auth-card.shake{animation:shake .35s;}
+  .logout-btn{
+    position:fixed;top:14px;right:14px;z-index:500;
+    background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;
+    transition:color .15s,border-color .15s;
+  }
+  .logout-btn:hover{color:var(--bad);border-color:var(--bad);}
   @keyframes shake{
     0%,100%{transform:translateX(0);}
     25%{transform:translateX(-8px);}
@@ -434,9 +453,9 @@
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
     <div class="lang-switch">
-      <a href="GR_Production_Dashboard.html" class="lang-btn">ไทย</a>
-      <a href="GR_Production_Dashboard_TW.html" class="lang-btn active">繁體中文</a>
-      <a href="GR_Production_Dashboard_MM.html" class="lang-btn">မြန်မာ</a>
+      <a href="GR_Production_Dashboard.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','th')">ไทย</a>
+      <a href="GR_Production_Dashboard_TW.html" class="lang-btn active" onclick="localStorage.setItem('gr_lang','tw')">繁體中文</a>
+      <a href="GR_Production_Dashboard_MM.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','mm')">မြန်မာ</a>
     </div>
     <div class="brand-eyebrow"><span class="dot"></span>GR · ACCESS CONTROL</div>
     <h2 class="auth-title">請輸入密碼</h2>
@@ -448,6 +467,7 @@
 </div>
 
 <div id="appRoot" style="display:none;">
+  <button id="logoutBtn" class="logout-btn" title="登出">⏻ 登出</button>
 
   <!-- ============ HUB / MENU VIEW ============ -->
   <div class="hub-view" id="hubView">
@@ -670,6 +690,11 @@ function unlockApp(){
   showHub();
 }
 
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  localStorage.removeItem(AUTH_LS_KEY);
+  location.reload();
+});
+
 // ---------- view navigation ----------
 function showHub(){
   document.getElementById('hubView').style.display = 'flex';
@@ -830,8 +855,8 @@ function initFromData(data){
   state.page = 1;
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
-  buildPanel('panel-emp', allEmployees, state.employees);
-  buildPanel('panel-dept', allDepts, state.depts);
+  buildPanel('panel-emp', allEmployees, state.employees, EMP_LABELS);
+  buildPanel('panel-dept', allDepts, state.depts, DEPT_LABELS);
   document.getElementById('label-month').textContent='全部';
   document.getElementById('label-emp').textContent='全部';
   document.getElementById('label-dept').textContent='全部';
@@ -870,7 +895,7 @@ function buildProductionDeptFilter(depts){
   const sel = document.getElementById('prodDeptFilter');
   const prevVal = sel.value;
   sel.innerHTML = '<option value="">全部</option>' +
-    depts.map(d=>`<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+    depts.map(d=>`<option value="${d.replace(/"/g,'&quot;')}">${translateDept(d)}</option>`).join('');
   sel.value = depts.includes(prevVal) ? prevVal : '';
 }
 
@@ -902,6 +927,141 @@ function cleanMaterialDisplay(material){
   return s || material;
 }
 
+const EMP_LABELS = {
+  "จิณณะ BG":"金娜 BG",
+  "ซอ (พม่า)":"索（緬甸）",
+  "ณรงค์":"那隆",
+  "ดวงใจ BG":"端婕 BG",
+  "นาย (พม่า)":"乃（緬甸）",
+  "นิตยา+เย็นจิตร (SR)":"妮達雅+燕吉（SR）",
+  "นิสา BG":"妮莎 BG",
+  "นุ้ย(พม่า)":"努伊（緬甸）",
+  "บุญมา":"汶瑪",
+  "บุญมา+ปัน":"汶瑪+潘",
+  "ประมวล":"巴穆安",
+  "ปิยนุช":"比雅努",
+  "ยาว RB":"堯 RB",
+  "วิน":"溫",
+  "วิน (พม่า)":"溫（緬甸）",
+  "ศรายุทธ BG":"沙拉育 BG",
+  "อังคณา":"安卡娜",
+  "อังคณา+ปัน":"安卡娜+潘",
+  "โซยูออง":"蘇育昂"
+};
+function translateEmp(name){ return name ? (EMP_LABELS[name] || name) : name; }
+
+const DEPT_LABELS = {
+  "คัดแยก":"分揀",
+  "ตัดยาง":"裁膠",
+  "ตัดยาง(เข้ามุม)":"裁膠(轉角)",
+  "ทากาว":"上膠",
+  "ปั๊ม":"沖壓",
+  "รีด":"壓延",
+  "เจาะ":"鑽孔",
+  "เจียร์":"研磨",
+  "เจียร์(ร่องมือ)":"研磨(手槽)",
+  "เจียร์(ละเอียด)":"研磨(細)",
+  "เจียร์(หยาบ)":"研磨(粗)",
+  "เจียร์เครื่องเจียร์ขัดข้อง":"研磨機故障",
+  "เปเปอร์":"砂紙",
+  "ใส่ท่อ":"裝管"
+};
+function translateDept(dept){ return dept ? (DEPT_LABELS[dept] || dept) : dept; }
+
+const MATERIAL_TERMS = [
+  ["ยางแผ่นฝาปิดก้น","膠片底蓋"],
+  ["ยางแกนหนัก","重芯膠"],
+  ["ยางกลมมีรู","圓形有孔膠"],
+  ["ยางกลมตัน","圓形實心膠"],
+  ["ยางฟองน้ำ","海綿膠"],
+  ["ยางแฮนด์","握把膠"],
+  ["ยางโฟม","泡棉"],
+  ["ซีลยาง","膠封條"],
+  ["ไม่เจียร์หัว-ท้าย","頭尾未磨"],
+  ["เจียร์หัว-ท้าย","磨頭尾"],
+  ["ไม่เจียร์ผิว","未磨面"],
+  ["เจียร์ผิว","磨面"],
+  ["สูตรไร้สาร","無添加配方"],
+  ["ไร้สาร","無添加"],
+  ["เนื้อธรรมดา","普通材質"],
+  ["หัวร่ม","傘頭"],
+  ["ลายเรียบ","平紋"],
+  ["เจาะรูนิ้ว","鑽指孔"],
+  ["เจาะรู","鑽孔"],
+  ["ครึ่งลูก","半顆"],
+  ["ลูกตอปิโด","魚雷球"],
+  ["ปีกหางตอปิโด","魚雷尾翼"],
+  ["ลูกขนไก่","羽毛球"],
+  ["ก้นยางสูตรเด้ง","彈力膠底"],
+  ["พินโบว์ลิ่ง","保齡球瓶"],
+  ["บอลโบว์ลิ่ง","保齡球"],
+  ["กาบปะบอล","球殼補片"],
+  ["คอโบว์ลิ่ง","保齡球頸"],
+  ["ปลอกตัวพิน","球瓶套"],
+  ["ปลอกฐาน","底座套"],
+  ["ปลอกล่าง","下套"],
+  ["ปลอกคอพิน","瓶頸套"],
+  ["ปลอกเรียบ","平滑套"],
+  ["ปิดจุก","封塞"],
+  ["จุกปิด","封塞"],
+  ["จุกปมสาย","繩結塞"],
+  ["จุกเท้าเหยียบ","踏板塞"],
+  ["ด้ามจรวด","火箭柄"],
+  ["ด้ามฮ้อกกี้","曲棍球柄"],
+  ["ด้ามร่องกอล์ฟ","高爾夫溝柄"],
+  ["แกนหนัก","重芯"],
+  ["แกนหาง","尾芯"],
+  ["ใส้พิน","瓶芯"],
+  ["ใส้บอลพลาสติก","塑膠球芯"],
+  ["ก้นพิน","瓶底"],
+  ["ก้นปลอก","套底"],
+  ["ฝาปิดก้น","底蓋"],
+  ["ฝาปิดบนหัวโก","耙頭上蓋"],
+  ["หัวโก","耙頭"],
+  ["สายโก","耙繩"],
+  ["มือจับ","把手"],
+  ["กัดลาย","刻紋"],
+  ["วงแหวนใหญ่","大圓環"],
+  ["ลูกกลิ้ง","滾輪"],
+  ["คละสี","混色"],
+  ["เท้าเหยียบ","踏板"],
+  ["รูกลาง","中孔"],
+  ["ลูกเต๋าแบบเจาะรู","鑽孔骰子"],
+  ["ลูกเต๋า","骰子"],
+  ["ลูกฮ็อกกี้แบน","曲棍球扁球"],
+  ["แบบเจาะรู","鑽孔型"],
+  ["แบท","球拍"],
+  ["ทรงด้าม","握柄形"],
+  ["หลัก","主軸"],
+  ["พิน","瓶/釘"],
+  ["แฮนด์","把手"],
+  ["บอล","球"],
+  ["ปลอก","套"],
+  ["ห่วง","環"],
+  ["แกน","芯"],
+  ["ด้าม","柄"],
+  ["หัว","頭"],
+  ["ก้น","底/尾"],
+  ["จุก","塞"],
+  ["ฝาปิด","蓋"],
+  ["ตัว","本體"],
+  ["ฐาน","底座"],
+  ["ขอบ","邊"],
+  ["จาน","盤"],
+  ["โบว์ลิ่ง","保齡球"],
+  ["ฮ็อกกี้","曲棍球"],
+  ["ฮ้อกกี้","曲棍球"],
+  ["ฮํคกี้","曲棍球"],
+  ["กอล์ฟ","高爾夫"]
+];
+const MATERIAL_TERM_RE = new RegExp(MATERIAL_TERMS.map(t=>t[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'), 'g');
+const MATERIAL_TERM_MAP = Object.fromEntries(MATERIAL_TERMS);
+function translateMaterial(material){
+  if(!material) return material;
+  const cleaned = cleanMaterialDisplay(material);
+  return cleaned.replace(MATERIAL_TERM_RE, m => MATERIAL_TERM_MAP[m] || m);
+}
+
 // ---------- searchable dropdown (combobox) for รหัส Item / ชื่อวัตถุดิบ ----------
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -917,7 +1077,8 @@ function highlightMatch(text, query){
   return `${before}<mark>${match}</mark>${after}`;
 }
 
-function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect, stateKey}){
+function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect, stateKey, displayFn}){
+  const display = displayFn || (o=>o);
   const input = document.getElementById(inputId);
   const panel = document.getElementById(panelId);
   const clearBtn = document.getElementById(clearId);
@@ -935,7 +1096,7 @@ function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect,
       if(matches.length > shown.length){
         html += `<div class="ss-panel-meta">共找到 ${matches.length.toLocaleString()} 筆 — 顯示前 ${shown.length} 筆，輸入文字可縮小搜尋範圍</div>`;
       }
-      html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(opt, query)}</div>`).join('');
+      html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(display(opt), query)}</div>`).join('');
       panel.innerHTML = html;
     }
     panel.classList.add('open');
@@ -983,7 +1144,8 @@ setupSearchableSelect({
 });
 setupSearchableSelect({
   inputId:'prodSearchMaterial', panelId:'ssMaterialPanel', clearId:'ssMaterialClear', stateKey:'materialQuery',
-  getOptions: ()=>[...new Set(groupedProduction.map(r=>r.material))].filter(Boolean).sort()
+  getOptions: ()=>[...new Set(groupedProduction.map(r=>r.material))].filter(Boolean).sort(),
+  displayFn: translateMaterial
 });
 // สีของป้ายหน่วยงาน — กำหนดตายตัวสำหรับหน่วยงานหลัก ที่เหลือสุ่มจากชุดสีสำรองแบบ deterministic
 const DEPT_COLORS = {
@@ -1034,10 +1196,10 @@ function renderProduction(){
     <div class="prod-row">
       <div class="prod-row-main">
         <div class="prod-item-code">${row.item_code}</div>
-        <div class="prod-material">${cleanMaterialDisplay(row.material)}</div>
+        <div class="prod-material">${translateMaterial(row.material)}</div>
       </div>
       <div class="prod-row-meta">
-       <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
+       <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${translateDept(row.dept)}</span>
         <span class="prod-target">目標 <b>${row.target_100!=null ? fmtNum(row.target_100) : '—'}</b> 件/小時</span>
       </div>
     </div>
@@ -1274,7 +1436,7 @@ function renderDeptChart(data){
   charts.deptChart = new Chart(ctx, {
     type:'doughnut',
     data:{
-      labels: entries.map(e=>e[0]),
+      labels: entries.map(e=>translateDept(e[0])),
       datasets:[{data: entries.map(e=>e[1]), backgroundColor: CH_COLORS, borderColor:'#1b1f27', borderWidth:2}]
     },
     options:{
@@ -1296,7 +1458,7 @@ function renderIncentiveChart(data){
   charts.incentiveChart = new Chart(ctx, {
     type:'bar',
     data:{
-      labels: entries.map(e=>e[0]),
+      labels: entries.map(e=>translateEmp(e[0])),
       datasets:[{
         label:'超額獎勵 (฿)',
         data: entries.map(e=>e[1]),
@@ -1335,7 +1497,7 @@ function renderGaugeList(data){
     const over = val>=100;
     return `
     <div class="gauge-row">
-      <div class="gname" title="${emp}">${emp}</div>
+      <div class="gname" title="${translateEmp(emp)}">${translateEmp(emp)}</div>
       <div class="gauge-track">
         <div class="gauge-fill" style="width:${pct}%; background:${over? 'linear-gradient(90deg,#3fb3c9,#4cc38a)':'linear-gradient(90deg,#e0616e,#e8792b)'}"></div>
         <div class="gauge-target" style="left:${targetPct}%"></div>
@@ -1420,8 +1582,8 @@ function renderTable(data){
       <td class="mono">${r.date_iso||'—'}</td>
       <td>${r.customer||'—'}</td>
       <td class="mono">${r.item_code||'—'}</td>
-      <td>${r.dept||'—'}</td>
-      <td>${r.employee||'—'}</td>
+      <td>${r.dept?translateDept(r.dept):'—'}</td>
+      <td>${r.employee?translateEmp(r.employee):'—'}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
