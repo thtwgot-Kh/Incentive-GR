@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  try{
+    var CURRENT_LANG='th';
+    var LANG_FILES={th:'GR_Production_Dashboard.html', tw:'GR_Production_Dashboard_TW.html', mm:'GR_Production_Dashboard_MM.html'};
+    var pref = localStorage.getItem('gr_lang');
+    if(pref && LANG_FILES[pref] && pref!==CURRENT_LANG){
+      location.replace(LANG_FILES[pref]);
+    }
+  }catch(e){}
+})();
+</script>
 <title>แดชบอร์ดการผลิต — Production Line Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -321,6 +333,13 @@
   .lang-btn:hover{color:var(--text);border-color:var(--accent);}
   .lang-btn.active{background:var(--accent);border-color:var(--accent);color:#1a1108;}
   .auth-card.shake{animation:shake .35s;}
+  .logout-btn{
+    position:fixed;top:14px;right:14px;z-index:500;
+    background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;
+    transition:color .15s,border-color .15s;
+  }
+  .logout-btn:hover{color:var(--bad);border-color:var(--bad);}
   @keyframes shake{
     0%,100%{transform:translateX(0);}
     25%{transform:translateX(-8px);}
@@ -434,9 +453,9 @@
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
     <div class="lang-switch">
-      <a href="GR_Production_Dashboard.html" class="lang-btn active">ไทย</a>
-      <a href="GR_Production_Dashboard_TW.html" class="lang-btn">繁體中文</a>
-      <a href="GR_Production_Dashboard_MM.html" class="lang-btn">မြန်မာ</a>
+      <a href="GR_Production_Dashboard.html" class="lang-btn active" onclick="localStorage.setItem('gr_lang','th')">ไทย</a>
+      <a href="GR_Production_Dashboard_TW.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','tw')">繁體中文</a>
+      <a href="GR_Production_Dashboard_MM.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','mm')">မြန်မာ</a>
     </div>
     <div class="brand-eyebrow"><span class="dot"></span>GR · ACCESS CONTROL</div>
     <h2 class="auth-title">กรุณาใส่รหัสผ่าน</h2>
@@ -448,6 +467,7 @@
 </div>
 
 <div id="appRoot" style="display:none;">
+  <button id="logoutBtn" class="logout-btn" title="ออกจากระบบ">⏻ ออกจากระบบ</button>
 
   <!-- ============ HUB / MENU VIEW ============ -->
   <div class="hub-view" id="hubView">
@@ -669,6 +689,11 @@ function unlockApp(){
   document.getElementById('appRoot').style.display = 'block';
   showHub();
 }
+
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  localStorage.removeItem(AUTH_LS_KEY);
+  location.reload();
+});
 
 // ---------- view navigation ----------
 function showHub(){

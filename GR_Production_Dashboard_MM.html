@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  try{
+    var CURRENT_LANG='mm';
+    var LANG_FILES={th:'GR_Production_Dashboard.html', tw:'GR_Production_Dashboard_TW.html', mm:'GR_Production_Dashboard_MM.html'};
+    var pref = localStorage.getItem('gr_lang');
+    if(pref && LANG_FILES[pref] && pref!==CURRENT_LANG){
+      location.replace(LANG_FILES[pref]);
+    }
+  }catch(e){}
+})();
+</script>
 <title>ထုတ်လုပ်မှု ဒက်ရှ်ဘုတ် — Production Line Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+Myanmar:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -321,6 +333,13 @@
   .lang-btn:hover{color:var(--text);border-color:var(--accent);}
   .lang-btn.active{background:var(--accent);border-color:var(--accent);color:#1a1108;}
   .auth-card.shake{animation:shake .35s;}
+  .logout-btn{
+    position:fixed;top:14px;right:14px;z-index:500;
+    background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;
+    transition:color .15s,border-color .15s;
+  }
+  .logout-btn:hover{color:var(--bad);border-color:var(--bad);}
   @keyframes shake{
     0%,100%{transform:translateX(0);}
     25%{transform:translateX(-8px);}
@@ -434,9 +453,9 @@
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
     <div class="lang-switch">
-      <a href="GR_Production_Dashboard.html" class="lang-btn">ไทย</a>
-      <a href="GR_Production_Dashboard_TW.html" class="lang-btn">繁體中文</a>
-      <a href="GR_Production_Dashboard_MM.html" class="lang-btn active">မြန်မာ</a>
+      <a href="GR_Production_Dashboard.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','th')">ไทย</a>
+      <a href="GR_Production_Dashboard_TW.html" class="lang-btn" onclick="localStorage.setItem('gr_lang','tw')">繁體中文</a>
+      <a href="GR_Production_Dashboard_MM.html" class="lang-btn active" onclick="localStorage.setItem('gr_lang','mm')">မြန်မာ</a>
     </div>
     <div class="brand-eyebrow"><span class="dot"></span>GR · ACCESS CONTROL</div>
     <h2 class="auth-title">စကားဝှက် ထည့်ပါ</h2>
@@ -448,6 +467,7 @@
 </div>
 
 <div id="appRoot" style="display:none;">
+  <button id="logoutBtn" class="logout-btn" title="ထွက်ရန်">⏻ ထွက်ရန်</button>
 
   <!-- ============ HUB / MENU VIEW ============ -->
   <div class="hub-view" id="hubView">
@@ -670,6 +690,11 @@ function unlockApp(){
   showHub();
 }
 
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  localStorage.removeItem(AUTH_LS_KEY);
+  location.reload();
+});
+
 // ---------- view navigation ----------
 function showHub(){
   document.getElementById('hubView').style.display = 'flex';
@@ -830,8 +855,8 @@ function initFromData(data){
   state.page = 1;
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
-  buildPanel('panel-emp', allEmployees, state.employees);
-  buildPanel('panel-dept', allDepts, state.depts);
+  buildPanel('panel-emp', allEmployees, state.employees, EMP_LABELS);
+  buildPanel('panel-dept', allDepts, state.depts, DEPT_LABELS);
   document.getElementById('label-month').textContent='အားလုံး';
   document.getElementById('label-emp').textContent='အားလုံး';
   document.getElementById('label-dept').textContent='အားလုံး';
@@ -870,7 +895,7 @@ function buildProductionDeptFilter(depts){
   const sel = document.getElementById('prodDeptFilter');
   const prevVal = sel.value;
   sel.innerHTML = '<option value="">အားလုံး</option>' +
-    depts.map(d=>`<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+    depts.map(d=>`<option value="${d.replace(/"/g,'&quot;')}">${translateDept(d)}</option>`).join('');
   sel.value = depts.includes(prevVal) ? prevVal : '';
 }
 
@@ -904,6 +929,141 @@ function cleanMaterialDisplay(material){
   return s || material;
 }
 
+const EMP_LABELS = {
+  "จิณณะ BG":"ဂျင်နာ BG",
+  "ซอ (พม่า)":"စော (မြန်မာ)",
+  "ณรงค์":"နရွန်",
+  "ดวงใจ BG":"ဒွမ်းကျိုင်း BG",
+  "นาย (พม่า)":"နိုင် (မြန်မာ)",
+  "นิตยา+เย็นจิตร (SR)":"နစ်တာယာ+ရဲန်ကျစ် (SR)",
+  "นิสา BG":"နီဆာ BG",
+  "นุ้ย(พม่า)":"နွီ (မြန်မာ)",
+  "บุญมา":"ဘွန်းမာ",
+  "บุญมา+ปัน":"ဘွန်းမာ+ပန်",
+  "ประมวล":"ပရမွန်",
+  "ปิยนุช":"ပီယနွတ်",
+  "ยาว RB":"ယော RB",
+  "วิน":"ဝင်း",
+  "วิน (พม่า)":"ဝင်း (မြန်မာ)",
+  "ศรายุทธ BG":"စရာယွတ် BG",
+  "อังคณา":"အင်ခနာ",
+  "อังคณา+ปัน":"အင်ခနာ+ပန်",
+  "โซยูออง":"စိုးယုအောင်"
+};
+function translateEmp(name){ return name ? (EMP_LABELS[name] || name) : name; }
+
+const DEPT_LABELS = {
+  "คัดแยก":"ခွဲခြားသတ်မှတ်ခြင်း",
+  "ตัดยาง":"ရာဘာဖြတ်ခြင်း",
+  "ตัดยาง(เข้ามุม)":"ရာဘာဖြတ်ခြင်း (ထောင့်)",
+  "ทากาว":"ကော်သုတ်ခြင်း",
+  "ปั๊ม":"ဖိနှိပ်ခြင်း",
+  "รีด":"နယ်ခြင်း",
+  "เจาะ":"အပေါက်ဖောက်ခြင်း",
+  "เจียร์":"တိုက်ချွတ်ခြင်း",
+  "เจียร์(ร่องมือ)":"တိုက်ချွတ်ခြင်း (လက်ကြောင်း)",
+  "เจียร์(ละเอียด)":"တိုက်ချွတ်ခြင်း (သေချာ)",
+  "เจียร์(หยาบ)":"တိုက်ချွတ်ခြင်း (ရိုင်း)",
+  "เจียร์เครื่องเจียร์ขัดข้อง":"တိုက်ချွတ်စက် ချို့ယွင်း",
+  "เปเปอร์":"သဲစက္ကူ",
+  "ใส่ท่อ":"ပိုက်ထည့်ခြင်း"
+};
+function translateDept(dept){ return dept ? (DEPT_LABELS[dept] || dept) : dept; }
+
+const MATERIAL_TERMS = [
+  ["ยางแผ่นฝาปิดก้น","ရာဘာပြားအောက်ဖုံး"],
+  ["ยางแกนหนัก","ရာဘာအလေးချိန်တံ"],
+  ["ยางกลมมีรู","စက်ဝိုင်းအပေါက်ပါရာဘာ"],
+  ["ยางกลมตัน","စက်ဝိုင်းအစိုင်အခဲရာဘာ"],
+  ["ยางฟองน้ำ","ရေမြှုပ်ရာဘာ"],
+  ["ยางแฮนด์","လက်ကိုင်ရာဘာ"],
+  ["ยางโฟม","အမြှုပ်ရာဘာ"],
+  ["ซีลยาง","ရာဘာအနှစ်"],
+  ["ไม่เจียร์หัว-ท้าย","ထိပ်-အစွန်း မတိုက်ချွတ်"],
+  ["เจียร์หัว-ท้าย","ထိပ်-အစွန်း တိုက်ချွတ်"],
+  ["ไม่เจียร์ผิว","မျက်နှာပြင် မတိုက်ချွတ်"],
+  ["เจียร์ผิว","မျက်နှာပြင်တိုက်ချွတ်"],
+  ["สูตรไร้สาร","ဓာတုမဲ့ ဖော်မြူလာ"],
+  ["ไร้สาร","ဓာတုမဲ့"],
+  ["เนื้อธรรมดา","ပုံမှန်အရည်အသွေး"],
+  ["หัวร่ม","ထီးထိပ်"],
+  ["ลายเรียบ","ချောပုံစံ"],
+  ["เจาะรูนิ้ว","လက်ချောင်းအပေါက်ဖောက်"],
+  ["เจาะรู","အပေါက်ဖောက်"],
+  ["ครึ่งลูก","တစ်ဝက်"],
+  ["ลูกตอปิโด","တော်ပီဒိုဘောလုံး"],
+  ["ปีกหางตอปิโด","တော်ပီဒို အနောက်အတောင်"],
+  ["ลูกขนไก่","တောက်ကီဘောလုံး"],
+  ["ก้นยางสูตรเด้ง","ခုန်ကျ ရာဘာအောက်ခံ"],
+  ["พินโบว์ลิ่ง","ဘောလင်းပင်"],
+  ["บอลโบว์ลิ่ง","ဘောလင်းဘောလုံး"],
+  ["กาบปะบอล","ဘောလုံးအခွံပေါင်းစပ်"],
+  ["คอโบว์ลิ่ง","ဘောလင်းလည်ပင်း"],
+  ["ปลอกตัวพิน","ပင်ကိုယ်အခွံ"],
+  ["ปลอกฐาน","အခြေခံအခွံ"],
+  ["ปลอกล่าง","အောက်ခံအခွံ"],
+  ["ปลอกคอพิน","ပင်လည်ပင်းအခွံ"],
+  ["ปลอกเรียบ","ချောအခွံ"],
+  ["ปิดจุก","ပလပ်ပိတ်"],
+  ["จุกปิด","ပိတ်ပလပ်"],
+  ["จุกปมสาย","ကြိုးနှောင်ပလပ်"],
+  ["จุกเท้าเหยียบ","ခြေနင်းပလပ်"],
+  ["ด้ามจรวด","ဒုံးလက်ကိုင်"],
+  ["ด้ามฮ้อกกี้","ဟော့ကီလက်ကိုင်"],
+  ["ด้ามร่องกอล์ฟ","ဂေါက်သီးချောင်းလက်ကိုင်"],
+  ["แกนหนัก","အလေးချိန်တံ"],
+  ["แกนหาง","အနောက်တံ"],
+  ["ใส้พิน","ပင်အတွင်းသား"],
+  ["ใส้บอลพลาสติก","ပလပ်စတစ်ဘောလုံးအတွင်းသား"],
+  ["ก้นพิน","ပင်အောက်ခြေ"],
+  ["ก้นปลอก","အခွံအောက်ခြေ"],
+  ["ฝาปิดก้น","အောက်ခြေဖုံး"],
+  ["ฝาปิดบนหัวโก","ခွေါ်ခေါင်း အပေါ်ဖုံး"],
+  ["หัวโก","ခွေါ်ခေါင်း"],
+  ["สายโก","ခွေါ်ကြိုး"],
+  ["มือจับ","လက်ကိုင်"],
+  ["กัดลาย","ပုံစံထုတ်"],
+  ["วงแหวนใหญ่","ကွင်းကြီး"],
+  ["ลูกกลิ้ง","ဂလင်း"],
+  ["คละสี","ရောင်စုံ"],
+  ["เท้าเหยียบ","ခြေနင်း"],
+  ["รูกลาง","အလယ်အပေါက်"],
+  ["ลูกเต๋าแบบเจาะรู","အပေါက်ပါ ဒိုင်စတုရန်း"],
+  ["ลูกเต๋า","ဒိုင်စတုရန်း"],
+  ["ลูกฮ็อกกี้แบน","ဟော့ကီဘောလုံးပြား"],
+  ["แบบเจาะรู","အပေါက်ဖောက်ပုံစံ"],
+  ["แบท","တုတ်"],
+  ["ทรงด้าม","လက်ကိုင်ပုံသဏ္ဍာန်"],
+  ["หลัก","အဓိကတံ"],
+  ["พิน","ပင်"],
+  ["แฮนด์","လက်ကိုင်"],
+  ["บอล","ဘောလုံး"],
+  ["ปลอก","အခွံ"],
+  ["ห่วง","ကွင်း"],
+  ["แกน","တံ"],
+  ["ด้าม","လက်ကိုင်"],
+  ["หัว","ခေါင်း"],
+  ["ก้น","အောက်ခြေ"],
+  ["จุก","ပလပ်"],
+  ["ฝาปิด","အဖုံး"],
+  ["ตัว","ကိုယ်"],
+  ["ฐาน","အခြေခံ"],
+  ["ขอบ","အနား"],
+  ["จาน","ပန်းကန်"],
+  ["โบว์ลิ่ง","ဘောလင်း"],
+  ["ฮ็อกกี้","ဟော့ကီ"],
+  ["ฮ้อกกี้","ဟော့ကီ"],
+  ["ฮํคกี้","ဟော့ကီ"],
+  ["กอล์ฟ","ဂေါက်သီး"]
+];
+const MATERIAL_TERM_RE = new RegExp(MATERIAL_TERMS.map(t=>t[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'), 'g');
+const MATERIAL_TERM_MAP = Object.fromEntries(MATERIAL_TERMS);
+function translateMaterial(material){
+  if(!material) return material;
+  const cleaned = cleanMaterialDisplay(material);
+  return cleaned.replace(MATERIAL_TERM_RE, m => MATERIAL_TERM_MAP[m] || m);
+}
+
 // ---------- searchable dropdown (combobox) for รหัส Item / ชื่อวัตถุดิบ ----------
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -919,7 +1079,8 @@ function highlightMatch(text, query){
   return `${before}<mark>${match}</mark>${after}`;
 }
 
-function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect, stateKey}){
+function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect, stateKey, displayFn}){
+  const display = displayFn || (o=>o);
   const input = document.getElementById(inputId);
   const panel = document.getElementById(panelId);
   const clearBtn = document.getElementById(clearId);
@@ -937,7 +1098,7 @@ function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect,
       if(matches.length > shown.length){
         html += `<div class="ss-panel-meta">${matches.length.toLocaleString()} ခု တွေ့ရှိသည် — ပထမဆုံး ${shown.length} ခုကို ပြသထားသည်၊ ကျဉ်းစေရန် စာရိုက်ရှာပါ</div>`;
       }
-      html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(opt, query)}</div>`).join('');
+      html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(display(opt), query)}</div>`).join('');
       panel.innerHTML = html;
     }
     panel.classList.add('open');
@@ -985,7 +1146,8 @@ setupSearchableSelect({
 });
 setupSearchableSelect({
   inputId:'prodSearchMaterial', panelId:'ssMaterialPanel', clearId:'ssMaterialClear', stateKey:'materialQuery',
-  getOptions: ()=>[...new Set(groupedProduction.map(r=>r.material))].filter(Boolean).sort()
+  getOptions: ()=>[...new Set(groupedProduction.map(r=>r.material))].filter(Boolean).sort(),
+  displayFn: translateMaterial
 });
 // สีของป้ายหน่วยงาน — กำหนดตายตัวสำหรับหน่วยงานหลัก ที่เหลือสุ่มจากชุดสีสำรองแบบ deterministic
 const DEPT_COLORS = {
@@ -1036,10 +1198,10 @@ function renderProduction(){
     <div class="prod-row">
       <div class="prod-row-main">
         <div class="prod-item-code">${row.item_code}</div>
-        <div class="prod-material">${cleanMaterialDisplay(row.material)}</div>
+        <div class="prod-material">${translateMaterial(row.material)}</div>
       </div>
       <div class="prod-row-meta">
-       <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
+       <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${translateDept(row.dept)}</span>
         <span class="prod-target">ပန်းတိုင် <b>${row.target_100!=null ? fmtNum(row.target_100) : '—'}</b> ခု/နာရီ</span>
       </div>
     </div>
@@ -1276,7 +1438,7 @@ function renderDeptChart(data){
   charts.deptChart = new Chart(ctx, {
     type:'doughnut',
     data:{
-      labels: entries.map(e=>e[0]),
+      labels: entries.map(e=>translateDept(e[0])),
       datasets:[{data: entries.map(e=>e[1]), backgroundColor: CH_COLORS, borderColor:'#1b1f27', borderWidth:2}]
     },
     options:{
@@ -1298,7 +1460,7 @@ function renderIncentiveChart(data){
   charts.incentiveChart = new Chart(ctx, {
     type:'bar',
     data:{
-      labels: entries.map(e=>e[0]),
+      labels: entries.map(e=>translateEmp(e[0])),
       datasets:[{
         label:'ပိုလျှံဆု (฿)',
         data: entries.map(e=>e[1]),
@@ -1337,7 +1499,7 @@ function renderGaugeList(data){
     const over = val>=100;
     return `
     <div class="gauge-row">
-      <div class="gname" title="${emp}">${emp}</div>
+      <div class="gname" title="${translateEmp(emp)}">${translateEmp(emp)}</div>
       <div class="gauge-track">
         <div class="gauge-fill" style="width:${pct}%; background:${over? 'linear-gradient(90deg,#3fb3c9,#4cc38a)':'linear-gradient(90deg,#e0616e,#e8792b)'}"></div>
         <div class="gauge-target" style="left:${targetPct}%"></div>
@@ -1422,8 +1584,8 @@ function renderTable(data){
       <td class="mono">${r.date_iso||'—'}</td>
       <td>${r.customer||'—'}</td>
       <td class="mono">${r.item_code||'—'}</td>
-      <td>${r.dept||'—'}</td>
-      <td>${r.employee||'—'}</td>
+      <td>${r.dept?translateDept(r.dept):'—'}</td>
+      <td>${r.employee?translateEmp(r.employee):'—'}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
