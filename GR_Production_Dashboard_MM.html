@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="my">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>แดชบอร์ดการผลิต — Production Line Dashboard</title>
+<title>ထုတ်လုပ်မှု ဒက်ရှ်ဘုတ် — Production Line Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+Myanmar:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
 /*!
  * Chart.js v4.4.4
@@ -46,8 +46,8 @@
     --radius:10px;
     --radius-lg:16px;
     --mono:'JetBrains Mono', monospace;
-    --disp:'Space Grotesk', 'Noto Sans Thai', sans-serif;
-    --body:'Noto Sans Thai', 'Space Grotesk', sans-serif;
+    --disp:'Space Grotesk', 'Noto Sans Myanmar', sans-serif;
+    --body:'Noto Sans Myanmar', 'Space Grotesk', sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -434,15 +434,15 @@
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
     <div class="lang-switch">
-      <a href="GR_Production_Dashboard.html" class="lang-btn active">ไทย</a>
+      <a href="GR_Production_Dashboard.html" class="lang-btn">ไทย</a>
       <a href="GR_Production_Dashboard_TW.html" class="lang-btn">繁體中文</a>
-      <a href="GR_Production_Dashboard_MM.html" class="lang-btn">မြန်မာ</a>
+      <a href="GR_Production_Dashboard_MM.html" class="lang-btn active">မြန်မာ</a>
     </div>
     <div class="brand-eyebrow"><span class="dot"></span>GR · ACCESS CONTROL</div>
-    <h2 class="auth-title">กรุณาใส่รหัสผ่าน</h2>
-    <p class="auth-sub">ข้อมูลนี้เป็นข้อมูลภายใน กรุณาใส่รหัสผ่านที่ได้รับเพื่อเข้าดู dashboard</p>
-    <input type="password" id="authInput" class="auth-input" placeholder="รหัสผ่าน" autocomplete="off">
-    <button id="authSubmit" class="auth-submit">เข้าสู่ระบบ</button>
+    <h2 class="auth-title">စကားဝှက် ထည့်ပါ</h2>
+    <p class="auth-sub">ဤသည်မှာ အတွင်းရေးအချက်အလက် ဖြစ်ပါသည်။ ဒက်ရှ်ဘုတ်ကို ကြည့်ရှုရန် ရရှိထားသော စကားဝှက်ကို ထည့်ပါ</p>
+    <input type="password" id="authInput" class="auth-input" placeholder="စကားဝှက်" autocomplete="off">
+    <button id="authSubmit" class="auth-submit">ဝင်ရောက်ရန်</button>
     <div id="authError" class="auth-error"></div>
   </div>
 </div>
@@ -453,21 +453,21 @@
   <div class="hub-view" id="hubView">
     <div class="hub-wrap">
       <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION &amp; INCENTIVE LOG</div>
-      <h1 class="hub-title">เลือกหัวข้อที่ต้องการดู</h1>
-      <div class="subtitle">ข้อมูลจากรายงาน GR PF — เลือกมุมมองที่ต้องการเข้าใช้งาน</div>
+      <h1 class="hub-title">ကြည့်ရှုလိုသော အကြောင်းအရာကို ရွေးပါ</h1>
+      <div class="subtitle">GR PF အစီရင်ခံစာမှ အချက်အလက် — အသုံးပြုလိုသော မြင်ကွင်းကို ရွေးပါ</div>
 
       <div class="hub-cards">
         <button class="hub-card" id="hubCardProduction">
           <div class="hub-card-icon">◧</div>
           <div class="hub-card-title">Production GR</div>
-          <div class="hub-card-desc">ค้นหา &amp; กรองเป้าหมายการผลิตตามรหัส Item, วัตถุดิบ และหน่วยงาน — แสดงผลแบบข้อความอ่านง่าย</div>
-          <div class="hub-card-cta">เข้าดู เป้าการผลิต →</div>
+          <div class="hub-card-desc">Item ကုဒ်၊ ကုန်ကြမ်းနှင့် ဌာနအလိုက် ထုတ်လုပ်မှုပန်းတိုင်ကို ရှာဖွေ &amp; စစ်ထုတ်ပါ — ဖတ်ရှုရလွယ်ကူသော စာသားဖြင့် ပြသသည်</div>
+          <div class="hub-card-cta">ထုတ်လုပ်မှုပန်းတိုင် ကြည့်ရန် →</div>
         </button>
         <button class="hub-card" id="hubCardIncentive">
           <div class="hub-card-icon">◨</div>
           <div class="hub-card-title">Incentive GR</div>
-          <div class="hub-card-desc">แดชบอร์ดภาพรวมยอดผลิตจริงเทียบเป้าหมาย ผลตอบแทนส่วนเกิน และประสิทธิภาพรายพนักงาน</div>
-          <div class="hub-card-cta">เข้าดู แดชบอร์ด →</div>
+          <div class="hub-card-desc">အမှန်တကယ်ထုတ်လုပ်မှုကို ပန်းတိုင်နှင့် နှိုင်းယှဉ်ခြင်း၊ ပိုလျှံဆုငွေနှင့် ဝန်ထမ်းစွမ်းဆောင်ရည် ခြုံငုံသုံးသပ်ချက် ဒက်ရှ်ဘုတ်</div>
+          <div class="hub-card-cta">ဒက်ရှ်ဘုတ် ကြည့်ရန် →</div>
         </button>
       </div>
     </div>
@@ -475,37 +475,37 @@
 
   <!-- ============ PRODUCTION GR VIEW ============ -->
   <div class="wrap" id="productionView" style="display:none;">
-    <button class="back-btn" id="backFromProduction">← กลับหน้าหลัก</button>
+    <button class="back-btn" id="backFromProduction">← ပင်မစာမျက်နှာသို့</button>
     <header class="top">
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION TARGETS</div>
-        <h1>ค้นหาเป้าหมายการผลิต</h1>
-        <div class="subtitle">ค้นหาและกรองเป้าหมายการผลิตตามรหัส Item, ชื่อวัตถุดิบ และหน่วยงาน (ข้อมูลผ่านการจัดกลุ่มแล้ว)</div>
+        <h1>ထုတ်လုပ်မှုပန်းတိုင် ရှာဖွေရန်</h1>
+        <div class="subtitle">Item ကုဒ်၊ ကုန်ကြမ်းအမည်နှင့် ဌာနအလိုက် ထုတ်လုပ်မှုပန်းတိုင်ကို ရှာဖွေနှင့် စစ်ထုတ်ပါ (အုပ်စုဖွဲ့ပြီးသား အချက်အလက်)</div>
       </div>
-      <div class="meta-chip">พบ <b id="prodResultCount">0</b> รายการ</div>
+      <div class="meta-chip">တွေ့ရှိမှု <b id="prodResultCount">0</b> ခု</div>
     </header>
 
     <div class="prod-search-bar">
       <div class="filter-group ss-group" style="flex:1;">
-        <span class="filter-label">รหัส Item</span>
+        <span class="filter-label">Item ကုဒ်</span>
         <div class="ss-control" id="ssItemControl">
-          <input type="text" id="prodSearchItem" class="search-box" placeholder="ค้นหา / เลือกรหัส Item..." autocomplete="off">
-          <button class="ss-clear" id="ssItemClear" title="ล้างค่า" type="button">✕</button>
+          <input type="text" id="prodSearchItem" class="search-box" placeholder="ရှာဖွေ / Item ကုဒ် ရွေးပါ..." autocomplete="off">
+          <button class="ss-clear" id="ssItemClear" title="ရှင်းလင်းရန်" type="button">✕</button>
         </div>
         <div class="filter-panel ss-panel" id="ssItemPanel"></div>
       </div>
       <div class="filter-group ss-group" style="flex:1;">
-        <span class="filter-label">ชื่อวัตถุดิบ</span>
+        <span class="filter-label">ကုန်ကြမ်းအမည်</span>
         <div class="ss-control" id="ssMaterialControl">
-          <input type="text" id="prodSearchMaterial" class="search-box" placeholder="ค้นหา / เลือกชื่อวัตถุดิบ..." autocomplete="off">
-          <button class="ss-clear" id="ssMaterialClear" title="ล้างค่า" type="button">✕</button>
+          <input type="text" id="prodSearchMaterial" class="search-box" placeholder="ရှာဖွေ / ကုန်ကြမ်းအမည် ရွေးပါ..." autocomplete="off">
+          <button class="ss-clear" id="ssMaterialClear" title="ရှင်းလင်းရန်" type="button">✕</button>
         </div>
         <div class="filter-panel ss-panel" id="ssMaterialPanel"></div>
       </div>
       <div class="filter-group">
-        <span class="filter-label">หน่วยงาน</span>
+        <span class="filter-label">ဌာန</span>
         <select id="prodDeptFilter" class="connect-select prod-dept-select">
-          <option value="">ทั้งหมด</option>
+          <option value="">အားလုံး</option>
         </select>
       </div>
     </div>
@@ -515,122 +515,122 @@
 
   <!-- ============ INCENTIVE GR VIEW (dashboard) ============ -->
   <div class="wrap" id="incentiveView" style="display:none;">
-    <button class="back-btn" id="backFromIncentive">← กลับหน้าหลัก</button>
+    <button class="back-btn" id="backFromIncentive">← ပင်မစာမျက်နှာသို့</button>
 
   <header class="top">
     <div>
       <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION &amp; INCENTIVE LOG</div>
-      <h1>แดชบอร์ดการผลิตรายวัน &amp; อินเซนทีฟพนักงาน</h1>
-      <div class="subtitle">ภาพรวมยอดผลิตจริงเทียบเป้าหมาย ผลตอบแทนส่วนเกิน และประสิทธิภาพรายบุคคล — ข้อมูลจากรายงาน GR PF</div>
+      <h1>နေ့စဉ်ထုတ်လုပ်မှု &amp; ဝန်ထမ်းဆု ဒက်ရှ်ဘုတ်</h1>
+      <div class="subtitle">အမှန်တကယ်ထုတ်လုပ်မှုကို ပန်းတိုင်နှင့် နှိုင်းယှဉ်ခြင်း၊ ပိုလျှံဆုငွေနှင့် တစ်ဦးချင်းစွမ်းဆောင်ရည် ခြုံငုံသုံးသပ်ချက် — GR PF အစီရင်ခံစာမှ အချက်အလက်</div>
     </div>
-    <div class="meta-chip">ช่วงข้อมูล <b id="dateRangeChip">—</b> · <b id="rowCountChip">0</b> รายการ</div>
+    <div class="meta-chip">အချက်အလက်ကာလ <b id="dateRangeChip">—</b> · <b id="rowCountChip">0</b> ခု</div>
   </header>
 
   <div class="connect-bar" id="connectBar">
     <div class="connect-status" id="connectStatus">
       <span class="dot-static" id="connDot"></span>
-      <span id="connText">กำลังแสดงข้อมูล <b>snapshot</b> ที่ฝังไว้ตอนสร้างไฟล์ — ยังไม่เชื่อมต่อ Google Sheet</span>
+      <span id="connText">ဖိုင်ဖန်တီးစဉ်က ထည့်သွင်းထားသော <b>snapshot</b> အချက်အလက်ကို ပြသနေသည် — Google Sheet နှင့် မချိတ်ဆက်ရသေးပါ</span>
     </div>
     <div class="connect-controls">
-      <input type="text" id="sheetUrlInput" class="connect-input" placeholder="วาง Google Apps Script Web App URL ที่นี่ (https://script.google.com/macros/s/.../exec)">
-      <button id="connectBtn" class="connect-btn">เชื่อมต่อ</button>
-      <select id="autoRefreshSelect" class="connect-select" title="ตั้งเวลารีเฟรชอัตโนมัติ">
-        <option value="0">ไม่รีเฟรชอัตโนมัติ</option>
-        <option value="30000">ทุก 30 วินาที</option>
-        <option value="60000">ทุก 1 นาที</option>
-        <option value="300000">ทุก 5 นาที</option>
+      <input type="text" id="sheetUrlInput" class="connect-input" placeholder="Google Apps Script Web App URL ကို ဤနေရာတွင် ကူးထည့်ပါ (https://script.google.com/macros/s/.../exec)">
+      <button id="connectBtn" class="connect-btn">ချိတ်ဆက်ရန်</button>
+      <select id="autoRefreshSelect" class="connect-select" title="အလိုအလျောက် ပြန်လည်စတင်ချိန် သတ်မှတ်ရန်">
+        <option value="0">အလိုအလျောက် ပြန်မလည်စတင်ပါ</option>
+        <option value="30000">၃၀ စက္ကန့်တိုင်း</option>
+        <option value="60000">၁ မိနစ်တိုင်း</option>
+        <option value="300000">၅ မိနစ်တိုင်း</option>
       </select>
-      <button id="refreshNowBtn" class="connect-btn ghost" title="รีเฟรชข้อมูลตอนนี้">⟳ รีเฟรชตอนนี้</button>
+      <button id="refreshNowBtn" class="connect-btn ghost" title="အချက်အလက်ကို ယခုပြန်လည်စတင်ရန်">⟳ ယခုပြန်လည်စတင်ရန်</button>
     </div>
   </div>
 
   <div class="filterbar" id="filterbar">
 
     <div class="filter-group">
-      <span class="filter-label">เดือนที่ทำงาน</span>
+      <span class="filter-label">အလုပ်လုပ်သည့်လ</span>
       <button class="filter-btn" data-target="panel-month" id="btn-month">
-        <span id="label-month">ทั้งหมด</span><span class="chev">▾</span>
+        <span id="label-month">အားလုံး</span><span class="chev">▾</span>
       </button>
       <div class="filter-panel" id="panel-month"></div>
     </div>
     <div class="filter-group">
-      <span class="filter-label">ชื่อพนักงาน</span>
+      <span class="filter-label">ဝန်ထမ်းအမည်</span>
       <button class="filter-btn" data-target="panel-emp" id="btn-emp">
-        <span id="label-emp">ทั้งหมด</span><span class="chev">▾</span>
+        <span id="label-emp">အားလုံး</span><span class="chev">▾</span>
       </button>
       <div class="filter-panel" id="panel-emp"></div>
     </div>
     <div class="filter-group">
-      <span class="filter-label">หน่วยงาน</span>
+      <span class="filter-label">ဌာန</span>
       <button class="filter-btn" data-target="panel-dept" id="btn-dept">
-        <span id="label-dept">ทั้งหมด</span><span class="chev">▾</span>
+        <span id="label-dept">အားလုံး</span><span class="chev">▾</span>
       </button>
       <div class="filter-panel" id="panel-dept"></div>
     </div>
-    <button class="reset-btn" id="resetBtn">✕ ล้างตัวกรองทั้งหมด</button>
+    <button class="reset-btn" id="resetBtn">✕ စစ်ထုတ်မှုအားလုံး ရှင်းရန်</button>
   </div>
 
   <div class="kpi-grid" id="kpiGrid"></div>
 
   <div class="grid2">
     <div class="panel">
-      <h2>ยอดผลิตจริง เทียบเป้าหมายรายวัน</h2>
+      <h2>နေ့စဉ်အမှန်ထုတ်လုပ်မှု ပန်းတိုင်နှင့် နှိုင်းယှဉ်ချက်</h2>
       <div class="panel-note">Actual output vs 100% target, aggregated by day for the current filter</div>
       <div class="chart-holder tall"><canvas id="trendChart"></canvas></div>
     </div>
     <div class="panel">
-      <h2>สัดส่วนงานตามหน่วยงาน</h2>
-      <div class="panel-note">Share of records by department (หน่วยงาน)</div>
+      <h2>ဌာနအလိုက် အလုပ်အချိုးအစား</h2>
+      <div class="panel-note">Share of records by department (ဌာန)</div>
       <div class="chart-holder tall"><canvas id="deptChart"></canvas></div>
     </div>
   </div>
 
   <div class="grid2b">
     <div class="panel">
-      <h2>มูลค่าอินเซนทีฟสะสม ตามพนักงาน</h2>
-      <div class="panel-note">Sum of excess value (ส่วนต่างที่เกินจากเป้า, บาท) by employee — top 12</div>
+      <h2>ဝန်ထမ်းအလိုက် စုစုပေါင်း ဆုငွေတန်ဖိုး</h2>
+      <div class="panel-note">Sum of excess value (ပန်းတိုင်ထက်ပိုလျှံငွေ, ฿) by employee — top 12</div>
       <div class="chart-holder"><canvas id="incentiveChart"></canvas></div>
     </div>
     <div class="panel">
-      <h2>อัตราความสำเร็จเทียบเป้า (%) ตามพนักงาน</h2>
-      <div class="panel-note">Avg. actual/target(100%) ratio per employee — เส้นกลางคือ 100%</div>
+      <h2>ဝန်ထမ်းအလိုက် ပန်းတိုင်ပြည့်မီနှုန်း (%)</h2>
+      <div class="panel-note">Avg. actual/target(100%) ratio per employee — အလယ်မျဉ်းသည် 100%</div>
       <div class="gauge-list" id="gaugeList"></div>
     </div>
   </div>
 
   <div class="grid2b">
     <div class="panel">
-      <h2>ยอดผลิตตามลูกค้า (10 อันดับแรก)</h2>
+      <h2>ဖောက်သည်အလိုက် ထုတ်လုပ်မှု (ထိပ်ဆုံး ၁၀ ခု)</h2>
       <div class="panel-note">Actual pieces produced by top customers</div>
       <div class="chart-holder"><canvas id="customerChart"></canvas></div>
     </div>
     <div class="panel">
-      <h2>ของเสียสะสมรายวัน</h2>
-      <div class="panel-note">Defect count (จำนวนของเสีย) trend across filtered dates</div>
+      <h2>နေ့စဉ် စုစုပေါင်း ချို့ယွင်းပစ္စည်း</h2>
+      <div class="panel-note">Defect count (ချို့ယွင်းအရေအတွက်) trend across filtered dates</div>
       <div class="chart-holder"><canvas id="defectChart"></canvas></div>
     </div>
   </div>
 
   <div class="panel table-panel">
-    <h2>รายการข้อมูลดิบ (Filtered Records)</h2>
-    <div class="panel-note">คลิกหัวคอลัมน์เพื่อเรียงลำดับ — ค้นหาได้จากทุกคอลัมน์</div>
+    <h2>မူရင်းအချက်အလက် စာရင်း (Filtered Records)</h2>
+    <div class="panel-note">အစီအစဉ်ချရန် ကော်လံခေါင်းစဉ်ကို နှိပ်ပါ — ကော်လံအားလုံးမှ ရှာဖွေနိုင်သည်</div>
     <div class="table-controls">
-      <input type="text" class="search-box" id="searchBox" placeholder="ค้นหา: ลูกค้า, รหัส Item, วัตถุดิบ, พนักงาน...">
+      <input type="text" class="search-box" id="searchBox" placeholder="ရှာဖွေရန်: ဖောက်သည်, Item ကုဒ်, ကုန်ကြမ်း, ဝန်ထမ်း...">
     </div>
     <div class="table-wrap">
       <table id="dataTable">
         <thead>
           <tr>
-            <th data-key="date_iso">วันที่</th>
-            <th data-key="customer">ลูกค้า</th>
-            <th data-key="item_code">รหัส Item</th>
-            <th data-key="dept">หน่วยงาน</th>
-            <th data-key="employee">พนักงาน</th>
-            <th data-key="target_100" class="num mono">เป้า 100%</th>
-            <th data-key="actual_pcs" class="num mono">ผลิตจริง</th>
-            <th data-key="achv_pct" class="num mono">% สำเร็จ</th>
-            <th data-key="defects" class="num mono">ของเสีย</th>
-            <th data-key="excess_baht" class="num mono">ส่วนเกิน (บาท)</th>
+            <th data-key="date_iso">ရက်စွဲ</th>
+            <th data-key="customer">ဖောက်သည်</th>
+            <th data-key="item_code">Item ကုဒ်</th>
+            <th data-key="dept">ဌာန</th>
+            <th data-key="employee">ဝန်ထမ်း</th>
+            <th data-key="target_100" class="num mono">ပန်းတိုင် 100%</th>
+            <th data-key="actual_pcs" class="num mono">အမှန်ထုတ်လုပ်မှု</th>
+            <th data-key="achv_pct" class="num mono">ပြည့်မီနှုန်း %</th>
+            <th data-key="defects" class="num mono">ချို့ယွင်းပစ္စည်း</th>
+            <th data-key="excess_baht" class="num mono">ပိုလျှံငွေ (฿)</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -639,8 +639,8 @@
     <div class="pagination">
       <div id="pageInfo">—</div>
       <div class="pgbtns">
-        <button id="prevPage">‹ ก่อนหน้า</button>
-        <button id="nextPage">ถัดไป ›</button>
+        <button id="prevPage">‹ ယခင်</button>
+        <button id="nextPage">နောက်တစ်ခု ›</button>
       </div>
     </div>
   </div>
@@ -713,7 +713,7 @@ async function attemptLogin(){
     errEl.textContent = '';
     unlockApp();
   }else{
-    errEl.textContent = 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่';
+    errEl.textContent = 'စကားဝှက် မှားနေပါသည်။ ထပ်မံကြိုးစားပါ';
     card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
     input.value=''; input.focus();
   }
@@ -755,12 +755,12 @@ function setConnStatus(mode, text){
 }
 
 function fmtTime(d){
-  return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  return d.toLocaleTimeString('my-MM',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 
 async function fetchLive(url, {silent=false}={}){
   if(!url){ return; }
-  if(!silent) setConnStatus('loading', 'กำลังดึงข้อมูลจาก Google Sheet...');
+  if(!silent) setConnStatus('loading', 'Google Sheet မှ အချက်အလက် ရယူနေသည်...');
   try{
     const sep = url.includes('?') ? '&' : '?';
     const keyedUrl = url + sep + 'key=' + encodeURIComponent(AUTH_HASH);
@@ -768,25 +768,25 @@ async function fetchLive(url, {silent=false}={}){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if(data && data.error) throw new Error(data.error);
-    if(!Array.isArray(data)) throw new Error('รูปแบบข้อมูลที่ได้ไม่ใช่ array');
+    if(!Array.isArray(data)) throw new Error('ရရှိသော အချက်အလက်ပုံစံသည် array မဟုတ်ပါ');
     RAW = data;
     localStorage.setItem(LS_KEY, url);
     initFromData(RAW);
-    setConnStatus('live', `เชื่อมต่อสำเร็จ — ข้อมูล <b>live</b> จาก Google Sheet (${data.length.toLocaleString()} แถว) · อัปเดตล่าสุด <b>${fmtTime(new Date())}</b>`);
+    setConnStatus('live', `ချိတ်ဆက်မှု အောင်မြင်ပါသည် — Google Sheet မှ <b>live</b> အချက်အလက် (အတန်း ${data.length.toLocaleString()}) · နောက်ဆုံးအပ်ဒိတ် <b>${fmtTime(new Date())}</b>`);
   }catch(err){
-    setConnStatus('error', `เชื่อมต่อไม่สำเร็จ: <b>${err.message}</b> — กำลังแสดงข้อมูลชุดล่าสุดที่โหลดได้ (อาจเป็น snapshot เดิม) ตรวจสอบ URL และการตั้งค่า "Who has access: Anyone" ใน Apps Script`);
+    setConnStatus('error', `ချိတ်ဆက်မှု မအောင်မြင်ပါ: <b>${err.message}</b> — နောက်ဆုံးအောင်မြင်စွာ ရယူနိုင်ခဲ့သော အချက်အလက်ကို ပြသနေပါသည် (ဟောင်းနေသော snapshot ဖြစ်နိုင်သည်)၊ URL နှင့် Apps Script ရှိ "Who has access: Anyone" ဆက်တင်ကို စစ်ဆေးပါ`);
   }
 }
 
 document.getElementById('connectBtn').addEventListener('click', ()=>{
   const url = document.getElementById('sheetUrlInput').value.trim();
-  if(!url){ setConnStatus('error', 'กรุณาวาง Web App URL ก่อนกดเชื่อมต่อ'); return; }
+  if(!url){ setConnStatus('error', 'ချိတ်ဆက်ရန် မနှိပ်မီ Web App URL ကို အရင်ကူးထည့်ပါ'); return; }
   fetchLive(url);
   applyAutoRefresh();
 });
 document.getElementById('refreshNowBtn').addEventListener('click', ()=>{
   const url = document.getElementById('sheetUrlInput').value.trim() || localStorage.getItem(LS_KEY);
-  if(!url){ setConnStatus('error', 'ยังไม่ได้เชื่อมต่อ Google Sheet'); return; }
+  if(!url){ setConnStatus('error', 'Google Sheet နှင့် မချိတ်ဆက်ရသေးပါ'); return; }
   fetchLive(url);
 });
 document.getElementById('autoRefreshSelect').addEventListener('change', applyAutoRefresh);
@@ -820,7 +820,7 @@ function initFromData(data){
   monthLabels = {};
   allMonths.forEach(m=>{
     const [y,mo] = m.split('-');
-    const names = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const names = ['','ဇန်','ဖေ','မတ်','ဧပြီ','မေ','ဇွန်','ဇူ','သြ','စက်','အောက်','နို','ဒီ'];
     monthLabels[m] = names[parseInt(mo,10)] + ' ' + y;
   });
 
@@ -832,9 +832,9 @@ function initFromData(data){
   buildPanel('panel-month', allMonths, state.months, monthLabels);
   buildPanel('panel-emp', allEmployees, state.employees);
   buildPanel('panel-dept', allDepts, state.depts);
-  document.getElementById('label-month').textContent='ทั้งหมด';
-  document.getElementById('label-emp').textContent='ทั้งหมด';
-  document.getElementById('label-dept').textContent='ทั้งหมด';
+  document.getElementById('label-month').textContent='အားလုံး';
+  document.getElementById('label-emp').textContent='အားလုံး';
+  document.getElementById('label-dept').textContent='အားလုံး';
 
   buildProductionDeptFilter(allDepts);
   groupedProduction = groupProductionData(data);
@@ -869,7 +869,7 @@ function groupProductionData(data){
 function buildProductionDeptFilter(depts){
   const sel = document.getElementById('prodDeptFilter');
   const prevVal = sel.value;
-  sel.innerHTML = '<option value="">ทั้งหมด</option>' +
+  sel.innerHTML = '<option value="">အားလုံး</option>' +
     depts.map(d=>`<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
   sel.value = depts.includes(prevVal) ? prevVal : '';
 }
@@ -931,11 +931,11 @@ function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect,
     const shown = matches.slice(0, 80);
 
     if(shown.length === 0){
-      panel.innerHTML = `<div class="ss-panel-empty">ไม่พบตัวเลือกที่ตรงกัน</div>`;
+      panel.innerHTML = `<div class="ss-panel-empty">ကိုက်ညီသော ရွေးချယ်စရာ မတွေ့ပါ</div>`;
     }else{
       let html = '';
       if(matches.length > shown.length){
-        html += `<div class="ss-panel-meta">พบ ${matches.length.toLocaleString()} รายการ — แสดง ${shown.length} รายการแรก พิมพ์เพื่อค้นหาแคบลง</div>`;
+        html += `<div class="ss-panel-meta">${matches.length.toLocaleString()} ခု တွေ့ရှိသည် — ပထမဆုံး ${shown.length} ခုကို ပြသထားသည်၊ ကျဉ်းစေရန် စာရိုက်ရှာပါ</div>`;
       }
       html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(opt, query)}</div>`).join('');
       panel.innerHTML = html;
@@ -1028,7 +1028,7 @@ function renderProduction(){
   countEl.textContent = filtered.length.toLocaleString();
 
   if(filtered.length === 0){
-    listEl.innerHTML = `<div class="prod-empty">ไม่พบข้อมูลตามเงื่อนไขที่ค้นหา</div>`;
+    listEl.innerHTML = `<div class="prod-empty">ရှာဖွေမှုအခြေအနေနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ</div>`;
     return;
   }
 
@@ -1040,7 +1040,7 @@ function renderProduction(){
       </div>
       <div class="prod-row-meta">
        <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
-        <span class="prod-target">เป้าหมาย <b>${row.target_100!=null ? fmtNum(row.target_100) : '—'}</b> ชิ้น/ชม.</span>
+        <span class="prod-target">ပန်းတိုင် <b>${row.target_100!=null ? fmtNum(row.target_100) : '—'}</b> ခု/နာရီ</span>
       </div>
     </div>
   `).join('');
@@ -1050,8 +1050,8 @@ function renderProduction(){
 function buildPanel(panelId, items, stateSet, labels){
   const panel = document.getElementById(panelId);
   let html = `<div class="pgrp-actions">
-    <button data-act="all">เลือกทั้งหมด</button>
-    <button data-act="none">ล้าง</button>
+    <button data-act="all">အားလုံး ရွေးရန်</button>
+    <button data-act="none">ရှင်းရန်</button>
   </div>`;
   items.forEach(it=>{
     const lab = labels ? (labels[it]||it) : it;
@@ -1084,9 +1084,9 @@ function buildPanel(panelId, items, stateSet, labels){
 function refreshFilterLabel(panelId, total, stateSet){
   const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept'};
   const el = document.getElementById(map[panelId]);
-  if(stateSet.size===total) el.textContent = 'ทั้งหมด';
-  else if(stateSet.size===0) el.textContent = 'ไม่มี';
-  else el.textContent = stateSet.size + ' รายการ';
+  if(stateSet.size===total) el.textContent = 'အားလုံး';
+  else if(stateSet.size===0) el.textContent = 'မရှိ';
+  else el.textContent = stateSet.size + ' ခု';
 }
 
 // toggle open/close panels
@@ -1164,7 +1164,7 @@ function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete chart
 
 const CH_COLORS = ['#e8792b','#3fb3c9','#4cc38a','#e8c13e','#c76ce8','#e0616e','#7ba8e8','#e89a5c','#5cc9a8','#9c8ce8','#e85c9a','#8ce85c'];
 
-Chart.defaults.font.family = "'Noto Sans Thai','JetBrains Mono',sans-serif";
+Chart.defaults.font.family = "'Noto Sans Myanmar','JetBrains Mono',sans-serif";
 Chart.defaults.color = '#8b93a3';
 Chart.defaults.borderColor = '#2b3140';
 
@@ -1195,10 +1195,10 @@ function render(){
 
 function renderEmptyState(){
   ['kpiGrid'].forEach(id=>document.getElementById(id).innerHTML='');
-  document.getElementById('tableBody').innerHTML = `<tr><td colspan="10" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
-  document.getElementById('pageInfo').textContent = '0 รายการ';
+  document.getElementById('tableBody').innerHTML = `<tr><td colspan="10" class="empty-state">ရွေးချယ်ထားသော စစ်ထုတ်မှုနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ</td></tr>`;
+  document.getElementById('pageInfo').textContent = '0 ခု';
   ['trendChart','deptChart','incentiveChart','customerChart','defectChart'].forEach(destroyChart);
-  document.getElementById('gaugeList').innerHTML = `<div class="empty-state">ไม่มีข้อมูล</div>`;
+  document.getElementById('gaugeList').innerHTML = `<div class="empty-state">အချက်အလက် မရှိပါ</div>`;
 }
 
 function renderKPIs(data){
@@ -1215,12 +1215,12 @@ function renderKPIs(data){
   const totalHours = data.reduce((s,r)=>s+(r.work_hours||0),0);
 
   const kpis = [
-    {label:'ยอดผลิตจริงรวม', value:fmtNum(totalActual), unit:'ชิ้น', sub:`เป้าหมาย ${fmtNum(totalTarget)} ชิ้น`, cls:''},
-    {label:'อัตราสำเร็จเฉลี่ย', value:fmtNum(avgAchv,1), unit:'%', sub: avgAchv>=100?'สูงกว่าเป้าหมาย':'ต่ำกว่าเป้าหมาย', cls: avgAchv>=100?'good':'bad'},
-    {label:'มูลค่าผลิตรวม', value:fmtNum(totalValue,0), unit:'฿', sub:'จำนวนชิ้น × ต้นทุน/ชิ้น', cls:''},
-    {label:'ส่วนเกินเป้าสะสม', value:fmtNum(totalExcess,0), unit:'฿', sub: totalExcess>=0?'สุทธิเป็นบวก':'สุทธิเป็นลบ', cls: totalExcess>=0?'good':'bad'},
-    {label:'ของเสียสะสม', value:fmtNum(totalDefects), unit:'ชิ้น', sub:`จาก ${data.length.toLocaleString()} รายการ`, cls: totalDefects>0?'bad':'good'},
-    {label:'พนักงานที่ทำงาน', value:fmtNum(activeEmployees), unit:'คน', sub:`รวม ${fmtNum(totalHours,0)} ชม.ทำงาน`, cls:''},
+    {label:'စုစုပေါင်း အမှန်ထုတ်လုပ်မှု', value:fmtNum(totalActual), unit:'ခု', sub:`ပန်းတိုင် ${fmtNum(totalTarget)} ခု`, cls:''},
+    {label:'ပျမ်းမျှ ပြည့်မီနှုန်း', value:fmtNum(avgAchv,1), unit:'%', sub: avgAchv>=100?'ပန်းတိုင်ထက် မြင့်သည်':'ပန်းတိုင်ထက် နိမ့်သည်', cls: avgAchv>=100?'good':'bad'},
+    {label:'စုစုပေါင်း ထုတ်လုပ်မှုတန်ဖိုး', value:fmtNum(totalValue,0), unit:'฿', sub:'အရေအတွက် × ကုန်ကျစရိတ်/ခု', cls:''},
+    {label:'စုစုပေါင်း ပိုလျှံဆု', value:fmtNum(totalExcess,0), unit:'฿', sub: totalExcess>=0?'အသားတင် အပေါင်း':'အသားတင် အနုတ်', cls: totalExcess>=0?'good':'bad'},
+    {label:'စုစုပေါင်း ချို့ယွင်းပစ္စည်း', value:fmtNum(totalDefects), unit:'ခု', sub:`${data.length.toLocaleString()} ခုမှ`, cls: totalDefects>0?'bad':'good'},
+    {label:'အလုပ်လုပ်သော ဝန်ထမ်း', value:fmtNum(activeEmployees), unit:'ဦး', sub:`စုစုပေါင်း ${fmtNum(totalHours,0)} နာရီ အလုပ်`, cls:''},
   ];
 
   document.getElementById('kpiGrid').innerHTML = kpis.map(k=>`
@@ -1248,8 +1248,8 @@ function renderTrendChart(data){
     data:{
       labels: dates,
       datasets:[
-        {label:'ผลิตจริง', data:dates.map(d=>byDate[d].actual), borderColor:'#e8792b', backgroundColor:'#e8792b22', fill:true, tension:.3, pointRadius:2},
-        {label:'เป้าหมาย (ปรับตามชั่วโมง)', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
+        {label:'အမှန်ထုတ်လုပ်မှု', data:dates.map(d=>byDate[d].actual), borderColor:'#e8792b', backgroundColor:'#e8792b22', fill:true, tension:.3, pointRadius:2},
+        {label:'ပန်းတိုင် (နာရီအလိုက် ချိန်ညှိ)', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
       ]
     },
     options:{
@@ -1267,7 +1267,7 @@ function renderTrendChart(data){
 function renderDeptChart(data){
   const byDept = {};
   data.forEach(r=>{
-    const d = r.dept || 'ไม่ระบุ';
+    const d = r.dept || 'မသတ်မှတ်ရသေး';
     byDept[d] = (byDept[d]||0) + (r.actual_pcs||0);
   });
   const entries = Object.entries(byDept).sort((a,b)=>b[1]-a[1]);
@@ -1300,7 +1300,7 @@ function renderIncentiveChart(data){
     data:{
       labels: entries.map(e=>e[0]),
       datasets:[{
-        label:'ส่วนเกินเป้า (บาท)',
+        label:'ပိုလျှံဆု (฿)',
         data: entries.map(e=>e[1]),
         backgroundColor: entries.map(e=> e[1]>=0 ? '#4cc38a' : '#e0616e'),
         borderRadius:4,
@@ -1330,7 +1330,7 @@ function renderGaugeList(data){
     .sort((a,b)=>b[1]-a[1]);
   const maxVal = Math.max(100, ...entries.map(e=>e[1]));
   const list = document.getElementById('gaugeList');
-  if(entries.length===0){ list.innerHTML = `<div class="empty-state">ไม่มีข้อมูล</div>`; return; }
+  if(entries.length===0){ list.innerHTML = `<div class="empty-state">အချက်အလက် မရှိပါ</div>`; return; }
   list.innerHTML = entries.map(([emp,val])=>{
     const pct = Math.min(100, (val/maxVal)*100);
     const targetPct = Math.min(100, (100/maxVal)*100);
@@ -1350,7 +1350,7 @@ function renderGaugeList(data){
 function renderCustomerChart(data){
   const byCust = {};
   data.forEach(r=>{
-    const c = r.customer || 'ไม่ระบุ';
+    const c = r.customer || 'မသတ်မှတ်ရသေး';
     byCust[c] = (byCust[c]||0) + (r.actual_pcs||0);
   });
   const entries = Object.entries(byCust).sort((a,b)=>b[1]-a[1]).slice(0,10);
@@ -1360,7 +1360,7 @@ function renderCustomerChart(data){
     type:'bar',
     data:{
       labels: entries.map(e=>e[0]),
-      datasets:[{label:'ผลิตจริง (ชิ้น)', data:entries.map(e=>e[1]), backgroundColor:'#e8792b', borderRadius:4}]
+      datasets:[{label:'အမှန်ထုတ်လုပ်မှု (ခု)', data:entries.map(e=>e[1]), backgroundColor:'#e8792b', borderRadius:4}]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -1386,7 +1386,7 @@ function renderDefectChart(data){
     type:'bar',
     data:{
       labels: dates,
-      datasets:[{label:'ของเสีย', data:dates.map(d=>byDate[d]), backgroundColor:'#e0616e', borderRadius:3}]
+      datasets:[{label:'ချို့ယွင်းပစ္စည်း', data:dates.map(d=>byDate[d]), backgroundColor:'#e0616e', borderRadius:3}]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -1433,7 +1433,7 @@ function renderTable(data){
   }).join('');
 
   document.getElementById('pageInfo').textContent =
-    `แสดง ${sorted.length? startIdx+1:0}–${Math.min(startIdx+state.pageSize, sorted.length)} จาก ${sorted.length.toLocaleString()} รายการ · หน้า ${state.page}/${totalPages}`;
+    `${sorted.length? startIdx+1:0}–${Math.min(startIdx+state.pageSize, sorted.length)} ပြသနေသည် (${sorted.length.toLocaleString()} ခုအနက်) · စာမျက်နှာ ${state.page}/${totalPages}`;
   document.getElementById('prevPage').disabled = state.page<=1;
   document.getElementById('nextPage').disabled = state.page>=totalPages;
 }

@@ -194,7 +194,7 @@
   }
   .kpi .label{
     font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--text-faint);margin-bottom:10px;
+    color:var(--text);margin-bottom:10px;
   }
   .kpi .value{
     font-family:var(--mono);font-weight:700;font-size:24px;color:var(--text);
@@ -312,6 +312,14 @@
   .auth-error{
     color:var(--bad);font-size:12px;margin-top:12px;min-height:16px;
   }
+  .lang-switch{display:flex;gap:6px;justify-content:center;margin-bottom:16px;}
+  .lang-btn{
+    flex:1;padding:7px 10px;border-radius:7px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text-dim);font-size:12.5px;font-weight:600;
+    text-decoration:none;transition:background .15s,color .15s,border-color .15s;
+  }
+  .lang-btn:hover{color:var(--text);border-color:var(--accent);}
+  .lang-btn.active{background:var(--accent);border-color:var(--accent);color:#1a1108;}
   .auth-card.shake{animation:shake .35s;}
   @keyframes shake{
     0%,100%{transform:translateX(0);}
@@ -425,6 +433,11 @@
 
 <div id="authGate" class="auth-gate">
   <div class="auth-card">
+    <div class="lang-switch">
+      <a href="GR_Production_Dashboard.html" class="lang-btn">ไทย</a>
+      <a href="GR_Production_Dashboard_TW.html" class="lang-btn active">繁體中文</a>
+      <a href="GR_Production_Dashboard_MM.html" class="lang-btn">မြန်မာ</a>
+    </div>
     <div class="brand-eyebrow"><span class="dot"></span>GR · ACCESS CONTROL</div>
     <h2 class="auth-title">請輸入密碼</h2>
     <p class="auth-sub">此為內部資料，請輸入您取得的密碼以檢視儀表板</p>
@@ -866,6 +879,29 @@ document.getElementById('prodDeptFilter').addEventListener('change', (e)=>{
   renderProduction();
 });
 
+// ---------- Production GR: strip color keywords/codes from displayed material name ----------
+const COLOR_CODE_PREFIX = 'BK|WH|RD|BL|GN|YE|GY|OR|PU|PK|BR|CR';
+const COLOR_CODE_CHAIN_RE = new RegExp(`\\b(?:${COLOR_CODE_PREFIX})\\d{2}(?:-(?:${COLOR_CODE_PREFIX})\\d{2})*\\b`, 'gi');
+const COLOR_WORDS = ['น้ำเงิน','น้ำตาล','เหลือง','เขียว','ชมพู','ครีม','ม่วง','ดำ','ขาว','แดง','ฟ้า','เทา','ส้ม'];
+const COLOR_WORD_ALT = COLOR_WORDS.sort((a,b)=>b.length-a.length).join('|');
+const COLOR_WORD_CHAIN_RE = new RegExp(`(?:สี)?(?:${COLOR_WORD_ALT})(?:[-\\s]*(?:สี)?(?:${COLOR_WORD_ALT}))*`, 'g');
+function cleanMaterialDisplay(material){
+  if(!material) return material;
+  let s = material;
+  let changed = false;
+  s = s.replace(COLOR_CODE_CHAIN_RE, ()=>{ changed = true; return ' '; });
+  s = s.replace(COLOR_WORD_CHAIN_RE, ()=>{ changed = true; return ' '; });
+  if(!changed) return material;
+  s = s
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s*-\s*(?=[\s)]|$)/g, ' ')
+    .replace(/(^|\s)-+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([),])/g, '$1')
+    .trim();
+  return s || material;
+}
+
 // ---------- searchable dropdown (combobox) for รหัส Item / ชื่อวัตถุดิบ ----------
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -998,7 +1034,7 @@ function renderProduction(){
     <div class="prod-row">
       <div class="prod-row-main">
         <div class="prod-item-code">${row.item_code}</div>
-        <div class="prod-material">${row.material}</div>
+        <div class="prod-material">${cleanMaterialDisplay(row.material)}</div>
       </div>
       <div class="prod-row-meta">
        <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
@@ -1115,6 +1151,10 @@ function fmtBaht(n){
   if(n===null||n===undefined||isNaN(n)) return '—';
   return Number(n).toLocaleString('en-US',{maximumFractionDigits:0})+' ฿';
 }
+function computedAchvPct(r){
+  if(r.required_pcs==null || r.required_pcs===0 || r.actual_pcs==null) return null;
+  return (r.actual_pcs / r.required_pcs) * 100;
+}
 
 // ---------- charts ----------
 let charts = {};
@@ -1165,8 +1205,10 @@ function renderKPIs(data){
   const totalValue = data.reduce((s,r)=>s+(r.value_baht||0),0);
   const totalExcess = data.reduce((s,r)=>s+(r.excess_baht||0),0);
   const totalDefects = data.reduce((s,r)=>s+(r.defects||0),0);
-  const achvRows = data.filter(r=>r.achv_pct!==null && isFinite(r.achv_pct));
-  const avgAchv = achvRows.length ? achvRows.reduce((s,r)=>s+r.achv_pct,0)/achvRows.length : 0;
+  const achvRows = data.filter(r => r.required_pcs != null && r.required_pcs !== 0 && r.actual_pcs != null);
+  const sumActualForAchv = achvRows.reduce((s,r)=>s+r.actual_pcs, 0);
+  const sumRequiredForAchv = achvRows.reduce((s,r)=>s+r.required_pcs, 0);
+  const avgAchv = sumRequiredForAchv ? (sumActualForAchv / sumRequiredForAchv) * 100 : 0;
   const activeEmployees = new Set(data.map(r=>r.employee).filter(Boolean)).size;
   const totalHours = data.reduce((s,r)=>s+(r.work_hours||0),0);
 
@@ -1194,7 +1236,7 @@ function renderTrendChart(data){
     if(!r.date_iso) return;
     if(!byDate[r.date_iso]) byDate[r.date_iso] = {actual:0, target:0};
     byDate[r.date_iso].actual += (r.actual_pcs||0);
-    byDate[r.date_iso].target += (r.target_100||0);
+    byDate[r.date_iso].target += (r.required_pcs||0);
   });
   const dates = Object.keys(byDate).sort();
   destroyChart('trendChart');
@@ -1205,7 +1247,7 @@ function renderTrendChart(data){
       labels: dates,
       datasets:[
         {label:'實際產量', data:dates.map(d=>byDate[d].actual), borderColor:'#e8792b', backgroundColor:'#e8792b22', fill:true, tension:.3, pointRadius:2},
-        {label:'目標 100%', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
+        {label:'目標（依工時調整）', data:dates.map(d=>byDate[d].target), borderColor:'#3fb3c9', borderDash:[5,4], fill:false, tension:.3, pointRadius:0},
       ]
     },
     options:{
@@ -1276,12 +1318,14 @@ function renderIncentiveChart(data){
 function renderGaugeList(data){
   const byEmp = {};
   data.forEach(r=>{
-    if(!r.employee || r.achv_pct===null || !isFinite(r.achv_pct)) return;
-    if(!byEmp[r.employee]) byEmp[r.employee] = {sum:0,n:0};
-    byEmp[r.employee].sum += r.achv_pct;
-    byEmp[r.employee].n += 1;
+    if(!r.employee || r.required_pcs == null || r.required_pcs === 0 || r.actual_pcs == null) return;
+    if(!byEmp[r.employee]) byEmp[r.employee] = {actual:0, required:0};
+    byEmp[r.employee].actual += r.actual_pcs;
+    byEmp[r.employee].required += r.required_pcs;
   });
-  const entries = Object.entries(byEmp).map(([emp,v])=>[emp, v.sum/v.n]).sort((a,b)=>b[1]-a[1]);
+  const entries = Object.entries(byEmp)
+    .map(([emp,v]) => [emp, v.required ? (v.actual / v.required) * 100 : 0])
+    .sort((a,b)=>b[1]-a[1]);
   const maxVal = Math.max(100, ...entries.map(e=>e[1]));
   const list = document.getElementById('gaugeList');
   if(entries.length===0){ list.innerHTML = `<div class="empty-state">無資料</div>`; return; }
@@ -1355,7 +1399,8 @@ function renderDefectChart(data){
 
 function renderTable(data){
   const sorted = [...data].sort((a,b)=>{
-    let av = a[state.sortKey], bv = b[state.sortKey];
+    let av = state.sortKey==='achv_pct' ? computedAchvPct(a) : a[state.sortKey];
+    let bv = state.sortKey==='achv_pct' ? computedAchvPct(b) : b[state.sortKey];
     if(av===null||av===undefined) av = state.sortDir>0 ? Infinity : -Infinity;
     if(bv===null||bv===undefined) bv = state.sortDir>0 ? Infinity : -Infinity;
     if(typeof av === 'string') return av.localeCompare(bv) * state.sortDir;
@@ -1368,7 +1413,8 @@ function renderTable(data){
   const pageRows = sorted.slice(startIdx, startIdx+state.pageSize);
 
   document.getElementById('tableBody').innerHTML = pageRows.map(r=>{
-    const achvClass = (r.achv_pct!==null && r.achv_pct>=100) ? 'good':'bad';
+    const achv = computedAchvPct(r);
+    const achvClass = (achv!==null && achv>=100) ? 'good':'bad';
     const excessClass = (r.excess_baht!==null && r.excess_baht>=0) ? 'good':'bad';
     return `<tr>
       <td class="mono">${r.date_iso||'—'}</td>
@@ -1378,7 +1424,7 @@ function renderTable(data){
       <td>${r.employee||'—'}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
-      <td class="num"><span class="pill ${achvClass}">${r.achv_pct!==null?r.achv_pct.toFixed(1)+'%':'—'}</span></td>
+      <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
       <td class="num mono">${fmtNum(r.defects)}</td>
       <td class="num"><span class="pill ${excessClass}">${fmtBaht(r.excess_baht)}</span></td>
     </tr>`;
