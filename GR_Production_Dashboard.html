@@ -335,11 +335,11 @@
   .auth-card.shake{animation:shake .35s;}
   .logout-btn{
     position:fixed;top:14px;right:14px;z-index:500;
-    background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
+    background:var(--surface);border:1px solid var(--bad);color:var(--bad);
     padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;
-    transition:color .15s,border-color .15s;
+    transition:filter .15s;
   }
-  .logout-btn:hover{color:var(--bad);border-color:var(--bad);}
+  .logout-btn:hover{filter:brightness(1.2);}
   @keyframes shake{
     0%,100%{transform:translateX(0);}
     25%{transform:translateX(-8px);}
