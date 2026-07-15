@@ -1437,7 +1437,7 @@ function renderDeptChart(data){
     type:'doughnut',
     data:{
       labels: entries.map(e=>translateDept(e[0])),
-      datasets:[{data: entries.map(e=>e[1]), backgroundColor: CH_COLORS, borderColor:'#1b1f27', borderWidth:2}]
+      datasets:[{data: entries.map(e=>e[1]), backgroundColor: entries.map(e=>getDeptColor(e[0]).text), borderColor:'#1b1f27', borderWidth:2}]
     },
     options:{
       responsive:true, maintainAspectRatio:false, cutout:'62%',
