@@ -866,6 +866,31 @@ document.getElementById('prodDeptFilter').addEventListener('change', (e)=>{
   renderProduction();
 });
 
+// ---------- Production GR: strip color keywords/codes from displayed material name ----------
+// เอาเฉพาะคำสีและรหัสสี (เช่น ดำ, สีแดง, BK01, BL02-GN05) ออกจากชื่อวัตถุดิบตอนแสดงผล
+// ไม่แตะรหัสประเภทสินค้าอื่น เช่น AT01, SL01, JBB01 เพราะ prefix ไม่อยู่ในชุดรหัสสีที่รู้จัก
+const COLOR_CODE_PREFIX = 'BK|WH|RD|BL|GN|YE|GY|OR|PU|PK|BR|CR';
+const COLOR_CODE_CHAIN_RE = new RegExp(`\\b(?:${COLOR_CODE_PREFIX})\\d{2}(?:-(?:${COLOR_CODE_PREFIX})\\d{2})*\\b`, 'gi');
+const COLOR_WORDS = ['น้ำเงิน','น้ำตาล','เหลือง','เขียว','ชมพู','ครีม','ม่วง','ดำ','ขาว','แดง','ฟ้า','เทา','ส้ม'];
+const COLOR_WORD_ALT = COLOR_WORDS.sort((a,b)=>b.length-a.length).join('|');
+const COLOR_WORD_CHAIN_RE = new RegExp(`(?:สี)?(?:${COLOR_WORD_ALT})(?:[-\\s]*(?:สี)?(?:${COLOR_WORD_ALT}))*`, 'g');
+function cleanMaterialDisplay(material){
+  if(!material) return material;
+  let s = material;
+  let changed = false;
+  s = s.replace(COLOR_CODE_CHAIN_RE, ()=>{ changed = true; return ' '; });
+  s = s.replace(COLOR_WORD_CHAIN_RE, ()=>{ changed = true; return ' '; });
+  if(!changed) return material;
+  s = s
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s*-\s*(?=[\s)]|$)/g, ' ')
+    .replace(/(^|\s)-+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([),])/g, '$1')
+    .trim();
+  return s || material;
+}
+
 // ---------- searchable dropdown (combobox) for รหัส Item / ชื่อวัตถุดิบ ----------
 function escapeHtml(s){
   return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -998,7 +1023,7 @@ function renderProduction(){
     <div class="prod-row">
       <div class="prod-row-main">
         <div class="prod-item-code">${row.item_code}</div>
-        <div class="prod-material">${row.material}</div>
+        <div class="prod-material">${cleanMaterialDisplay(row.material)}</div>
       </div>
       <div class="prod-row-meta">
        <span class="prod-dept-pill" style="background:${getDeptColor(row.dept).bg};color:${getDeptColor(row.dept).text};border-color:${getDeptColor(row.dept).border};">${row.dept}</span>
