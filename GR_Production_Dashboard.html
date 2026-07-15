@@ -855,10 +855,9 @@ function initFromData(data){
   state.page = 1;
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
-  buildPanel('panel-emp', allEmployees, state.employees);
+  refreshEmployeePanel();
   buildPanel('panel-dept', allDepts, state.depts);
   document.getElementById('label-month').textContent='ทั้งหมด';
-  document.getElementById('label-emp').textContent='ทั้งหมด';
   document.getElementById('label-dept').textContent='ทั้งหมด';
 
   buildProductionDeptFilter(allDepts);
@@ -1080,38 +1079,49 @@ function buildPanel(panelId, items, stateSet, labels){
   </div>`;
   items.forEach(it=>{
     const lab = labels ? (labels[it]||it) : it;
-    html += `<label><input type="checkbox" value="${it.replace(/"/g,'&quot;')}" checked> ${lab}</label>`;
+    const isChecked = stateSet.has(it);
+    html += `<label><input type="checkbox" value="${it.replace(/"/g,'&quot;')}"${isChecked?' checked':''}> ${lab}</label>`;
   });
   panel.innerHTML = html;
-  items.forEach(it=>stateSet.add(it));
 
   panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change',()=>{
       if(cb.checked) stateSet.add(cb.value); else stateSet.delete(cb.value);
-      refreshFilterLabel(panelId, items.length, stateSet);
+      refreshFilterLabel(panelId, items, stateSet);
       state.page = 1;
+      if(panelId==='panel-month') refreshEmployeePanel();
       render();
     });
   });
   panel.querySelector('[data-act="all"]').addEventListener('click',()=>{
     panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=true; stateSet.add(cb.value);});
-    refreshFilterLabel(panelId, items.length, stateSet);
-    state.page = 1; render();
+    refreshFilterLabel(panelId, items, stateSet);
+    state.page = 1;
+    if(panelId==='panel-month') refreshEmployeePanel();
+    render();
   });
   panel.querySelector('[data-act="none"]').addEventListener('click',()=>{
-    panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false;});
-    stateSet.clear();
-    refreshFilterLabel(panelId, items.length, stateSet);
-    state.page = 1; render();
+    panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false; stateSet.delete(cb.value);});
+    refreshFilterLabel(panelId, items, stateSet);
+    state.page = 1;
+    if(panelId==='panel-month') refreshEmployeePanel();
+    render();
   });
 }
 
-function refreshFilterLabel(panelId, total, stateSet){
+function refreshEmployeePanel(){
+  const scopedEmployees = [...new Set(RAW.filter(r=>state.months.has(r.month)).map(r=>r.employee).filter(Boolean))].sort();
+  buildPanel('panel-emp', scopedEmployees, state.employees);
+  refreshFilterLabel('panel-emp', scopedEmployees, state.employees);
+}
+
+function refreshFilterLabel(panelId, items, stateSet){
   const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept'};
   const el = document.getElementById(map[panelId]);
-  if(stateSet.size===total) el.textContent = 'ทั้งหมด';
-  else if(stateSet.size===0) el.textContent = 'ไม่มี';
-  else el.textContent = stateSet.size + ' รายการ';
+  const checkedCount = items.filter(it=>stateSet.has(it)).length;
+  if(checkedCount===items.length) el.textContent = 'ทั้งหมด';
+  else if(checkedCount===0) el.textContent = 'ไม่มี';
+  else el.textContent = checkedCount + ' รายการ';
 }
 
 // toggle open/close panels
