@@ -190,6 +190,69 @@
   }
   .reset-btn:hover{border-color:var(--bad);color:var(--bad);}
 
+  /* Filter sidebar (Incentive GR) */
+  .incentive-layout{display:flex;align-items:flex-start;gap:20px;}
+  .filter-sidebar{
+    width:280px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-lg);position:sticky;top:20px;max-height:calc(100vh - 40px);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .filter-sidebar.collapsed{display:none;}
+  .filter-sidebar-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;border-bottom:1px solid var(--border-soft);flex-shrink:0;
+  }
+  .filter-sidebar-title{
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text);font-weight:600;
+  }
+  .filter-sidebar-collapse{
+    background:none;border:1px solid var(--border);color:var(--text-dim);
+    width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:14px;line-height:1;flex-shrink:0;
+  }
+  .filter-sidebar-collapse:hover{border-color:var(--accent);color:var(--accent);}
+  .filter-sidebar-body{padding:10px 12px 14px;overflow-y:auto;flex:1;}
+  .filter-sidebar .reset-btn{width:100%;margin:8px 0 0;justify-content:center;}
+  .filter-sidebar-open{
+    flex-shrink:0;position:sticky;top:20px;align-self:flex-start;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+    padding:10px 12px;color:var(--text-dim);cursor:pointer;font-size:12.5px;font-family:var(--body);
+    white-space:nowrap;
+  }
+  .filter-sidebar-open:hover{border-color:var(--accent);color:var(--accent);}
+  .incentive-content{flex:1;min-width:0;}
+  @media(max-width:900px){
+    .incentive-layout{flex-direction:column;}
+    .filter-sidebar{width:100%;position:static;max-height:none;}
+  }
+
+  .acc-group{border-bottom:1px solid var(--border-soft);}
+  .acc-group:last-of-type{border-bottom:none;}
+  .acc-btn{
+    width:100%;background:none;border:none;color:var(--text);cursor:pointer;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:11px 6px;font-family:var(--body);font-size:13px;text-align:left;
+  }
+  .acc-btn:hover{color:var(--accent);}
+  .acc-btn-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .acc-count{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+  .acc-btn.open .chev{transform:rotate(180deg);}
+  .acc-panel{display:none;padding:0 2px 12px;}
+  .acc-panel.open{display:block;}
+  .acc-panel label{
+    display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:6px;
+    font-size:12.8px;cursor:pointer;color:var(--text-dim);
+  }
+  .acc-panel label:hover{background:var(--surface-2);color:var(--text);}
+  .acc-panel input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0;}
+  .acc-panel .pgrp-actions{display:flex;gap:6px;padding:2px 2px 8px;}
+  .acc-panel-list{max-height:220px;overflow-y:auto;}
+  .panel-search-box{
+    width:100%;margin-bottom:8px;padding:7px 10px;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:6px;color:var(--text);
+    font-family:var(--body);font-size:12.5px;
+  }
+  .panel-search-box:focus{outline:none;border-color:var(--accent);}
+
   /* KPI cards */
   .kpi-grid{
     display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:24px;
@@ -564,118 +627,130 @@
     </div>
   </div>
 
-  <div class="filterbar" id="filterbar">
+  <div class="incentive-layout">
+    <aside class="filter-sidebar" id="filterSidebar">
+      <div class="filter-sidebar-head">
+        <span class="filter-sidebar-title">ตัวกรอง</span>
+        <button class="filter-sidebar-collapse" id="sidebarCollapseBtn" title="ซ่อนแถบตัวกรอง">‹</button>
+      </div>
+      <div class="filter-sidebar-body">
+        <div class="acc-group">
+          <button class="acc-btn" data-target="panel-month" id="btn-month">
+            <span>เดือนที่ทำงาน</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-month">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-month"></div>
+        </div>
+        <div class="acc-group">
+          <button class="acc-btn" data-target="panel-emp" id="btn-emp">
+            <span>ชื่อพนักงาน</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-emp">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-emp"></div>
+        </div>
+        <div class="acc-group">
+          <button class="acc-btn" data-target="panel-dept" id="btn-dept">
+            <span>หน่วยงาน</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-dept">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-dept"></div>
+        </div>
+        <div class="acc-group">
+          <button class="acc-btn" data-target="panel-customer" id="btn-customer">
+            <span>ลูกค้า</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-customer">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-customer"></div>
+        </div>
+        <div class="acc-group">
+          <button class="acc-btn" data-target="panel-po" id="btn-po">
+            <span>เลขที่ใบสั่งผลิต (PO)</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-po">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-po"></div>
+        </div>
+        <button class="reset-btn" id="resetBtn">✕ ล้างตัวกรองทั้งหมด</button>
+      </div>
+    </aside>
+    <button class="filter-sidebar-open" id="sidebarOpenBtn" style="display:none;" title="แสดงแถบตัวกรอง">☰ ตัวกรอง</button>
 
-    <div class="filter-group">
-      <span class="filter-label">เดือนที่ทำงาน</span>
-      <button class="filter-btn" data-target="panel-month" id="btn-month">
-        <span id="label-month">ทั้งหมด</span><span class="chev">▾</span>
-      </button>
-      <div class="filter-panel" id="panel-month"></div>
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">ชื่อพนักงาน</span>
-      <button class="filter-btn" data-target="panel-emp" id="btn-emp">
-        <span id="label-emp">ทั้งหมด</span><span class="chev">▾</span>
-      </button>
-      <div class="filter-panel" id="panel-emp"></div>
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">หน่วยงาน</span>
-      <button class="filter-btn" data-target="panel-dept" id="btn-dept">
-        <span id="label-dept">ทั้งหมด</span><span class="chev">▾</span>
-      </button>
-      <div class="filter-panel" id="panel-dept"></div>
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">ลูกค้า</span>
-      <button class="filter-btn" data-target="panel-customer" id="btn-customer">
-        <span id="label-customer">ทั้งหมด</span><span class="chev">▾</span>
-      </button>
-      <div class="filter-panel" id="panel-customer"></div>
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">เลขที่ใบสั่งผลิต (PO)</span>
-      <button class="filter-btn" data-target="panel-po" id="btn-po">
-        <span id="label-po">ทั้งหมด</span><span class="chev">▾</span>
-      </button>
-      <div class="filter-panel" id="panel-po"></div>
-    </div>
-    <button class="reset-btn" id="resetBtn">✕ ล้างตัวกรองทั้งหมด</button>
-  </div>
+    <div class="incentive-content">
+      <div class="kpi-grid" id="kpiGrid"></div>
 
-  <div class="kpi-grid" id="kpiGrid"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>ยอดผลิตจริง เทียบเป้าหมายรายวัน</h2>
+          <div class="panel-note">Actual output vs 100% target, aggregated by day for the current filter</div>
+          <div class="chart-holder tall"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h2>สัดส่วนงานตามหน่วยงาน</h2>
+          <div class="panel-note">Share of records by department (หน่วยงาน)</div>
+          <div class="chart-holder tall"><canvas id="deptChart"></canvas></div>
+        </div>
+      </div>
 
-  <div class="grid2">
-    <div class="panel">
-      <h2>ยอดผลิตจริง เทียบเป้าหมายรายวัน</h2>
-      <div class="panel-note">Actual output vs 100% target, aggregated by day for the current filter</div>
-      <div class="chart-holder tall"><canvas id="trendChart"></canvas></div>
-    </div>
-    <div class="panel">
-      <h2>สัดส่วนงานตามหน่วยงาน</h2>
-      <div class="panel-note">Share of records by department (หน่วยงาน)</div>
-      <div class="chart-holder tall"><canvas id="deptChart"></canvas></div>
-    </div>
-  </div>
+      <div class="grid2b">
+        <div class="panel">
+          <h2>มูลค่าอินเซนทีฟสะสม ตามพนักงาน</h2>
+          <div class="panel-note">Sum of excess value (ส่วนต่างที่เกินจากเป้า, บาท) by employee — top 12</div>
+          <div class="chart-holder"><canvas id="incentiveChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h2>อัตราความสำเร็จเทียบเป้า (%) ตามพนักงาน</h2>
+          <div class="panel-note">Avg. actual/target(100%) ratio per employee — เส้นกลางคือ 100%</div>
+          <div class="gauge-list" id="gaugeList"></div>
+        </div>
+      </div>
 
-  <div class="grid2b">
-    <div class="panel">
-      <h2>มูลค่าอินเซนทีฟสะสม ตามพนักงาน</h2>
-      <div class="panel-note">Sum of excess value (ส่วนต่างที่เกินจากเป้า, บาท) by employee — top 12</div>
-      <div class="chart-holder"><canvas id="incentiveChart"></canvas></div>
-    </div>
-    <div class="panel">
-      <h2>อัตราความสำเร็จเทียบเป้า (%) ตามพนักงาน</h2>
-      <div class="panel-note">Avg. actual/target(100%) ratio per employee — เส้นกลางคือ 100%</div>
-      <div class="gauge-list" id="gaugeList"></div>
-    </div>
-  </div>
+      <div class="grid2b">
+        <div class="panel">
+          <h2>ยอดผลิตตามลูกค้า (10 อันดับแรก)</h2>
+          <div class="panel-note">Actual pieces produced by top customers</div>
+          <div class="chart-holder"><canvas id="customerChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h2>ของเสียสะสมรายวัน</h2>
+          <div class="panel-note">Defect count (จำนวนของเสีย) trend across filtered dates</div>
+          <div class="chart-holder"><canvas id="defectChart"></canvas></div>
+        </div>
+      </div>
 
-  <div class="grid2b">
-    <div class="panel">
-      <h2>ยอดผลิตตามลูกค้า (10 อันดับแรก)</h2>
-      <div class="panel-note">Actual pieces produced by top customers</div>
-      <div class="chart-holder"><canvas id="customerChart"></canvas></div>
-    </div>
-    <div class="panel">
-      <h2>ของเสียสะสมรายวัน</h2>
-      <div class="panel-note">Defect count (จำนวนของเสีย) trend across filtered dates</div>
-      <div class="chart-holder"><canvas id="defectChart"></canvas></div>
-    </div>
-  </div>
-
-  <div class="panel table-panel">
-    <h2>รายการข้อมูลดิบ (Filtered Records)</h2>
-    <div class="panel-note">คลิกหัวคอลัมน์เพื่อเรียงลำดับ — ค้นหาได้จากทุกคอลัมน์</div>
-    <div class="table-controls">
-      <input type="text" class="search-box" id="searchBox" placeholder="ค้นหา: ลูกค้า, เลขที่ใบสั่งผลิต (PO), รหัส Item, วัตถุดิบ, พนักงาน...">
-    </div>
-    <div class="table-wrap">
-      <table id="dataTable">
-        <thead>
-          <tr>
-            <th data-key="date_iso">วันที่</th>
-            <th data-key="customer">ลูกค้า</th>
-            <th data-key="po">เลขที่ PO</th>
-            <th data-key="item_code">รหัส Item</th>
-            <th data-key="dept">หน่วยงาน</th>
-            <th data-key="employee">พนักงาน</th>
-            <th data-key="target_100" class="num mono">เป้า 100%</th>
-            <th data-key="actual_pcs" class="num mono">ผลิตจริง</th>
-            <th data-key="achv_pct" class="num mono">% สำเร็จ</th>
-            <th data-key="defects" class="num mono">ของเสีย</th>
-            <th data-key="excess_baht" class="num mono">ส่วนเกิน (บาท)</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </div>
-    <div class="pagination">
-      <div id="pageInfo">—</div>
-      <div class="pgbtns">
-        <button id="prevPage">‹ ก่อนหน้า</button>
-        <button id="nextPage">ถัดไป ›</button>
+      <div class="panel table-panel">
+        <h2>รายการข้อมูลดิบ (Filtered Records)</h2>
+        <div class="panel-note">คลิกหัวคอลัมน์เพื่อเรียงลำดับ — ค้นหาได้จากทุกคอลัมน์</div>
+        <div class="table-controls">
+          <input type="text" class="search-box" id="searchBox" placeholder="ค้นหา: ลูกค้า, เลขที่ใบสั่งผลิต (PO), รหัส Item, วัตถุดิบ, พนักงาน...">
+        </div>
+        <div class="table-wrap">
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th data-key="date_iso">วันที่</th>
+                <th data-key="customer">ลูกค้า</th>
+                <th data-key="po">เลขที่ PO</th>
+                <th data-key="item_code">รหัส Item</th>
+                <th data-key="material">วัตถุดิบ</th>
+                <th data-key="dept">หน่วยงาน</th>
+                <th data-key="employee">พนักงาน</th>
+                <th data-key="work_hours" class="num mono">ชม.ทำงาน</th>
+                <th data-key="target_100" class="num mono">เป้า 100%</th>
+                <th data-key="actual_pcs" class="num mono">ผลิตจริง</th>
+                <th data-key="achv_pct" class="num mono">% สำเร็จ</th>
+                <th data-key="defects" class="num mono">ของเสีย</th>
+                <th data-key="excess_baht" class="num mono">ส่วนเกิน (บาท)</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <div id="pageInfo">—</div>
+          <div class="pgbtns">
+            <button id="prevPage">‹ ก่อนหน้า</button>
+            <button id="nextPage">ถัดไป ›</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -877,9 +952,9 @@ function initFromData(data){
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
   refreshEmployeePanel();
-  buildPanel('panel-dept', allDepts, state.depts);
-  buildPanel('panel-customer', allCustomers, state.customers, {'':'(ไม่ระบุ)'});
-  buildPanel('panel-po', allPOs, state.pos, {'':'(ไม่ระบุ)'});
+  buildPanel('panel-dept', allDepts, state.depts, null, true);
+  buildPanel('panel-customer', allCustomers, state.customers, {'':'(ไม่ระบุ)'}, true);
+  buildPanel('panel-po', allPOs, state.pos, {'':'(ไม่ระบุ)'}, true);
   document.getElementById('label-month').textContent='ทั้งหมด';
   document.getElementById('label-dept').textContent='ทั้งหมด';
   document.getElementById('label-customer').textContent='ทั้งหมด';
@@ -1096,17 +1171,22 @@ function renderProduction(){
 }
 
 // ---------- build filter panels ----------
-function buildPanel(panelId, items, stateSet, labels){
+function buildPanel(panelId, items, stateSet, labels, searchable){
   const panel = document.getElementById(panelId);
   let html = `<div class="pgrp-actions">
     <button data-act="all">เลือกทั้งหมด</button>
     <button data-act="none">ล้าง</button>
   </div>`;
+  if(searchable){
+    html += `<input type="text" class="panel-search-box" placeholder="พิมพ์เพื่อค้นหา...">`;
+  }
+  html += `<div class="acc-panel-list">`;
   items.forEach(it=>{
     const lab = labels ? (labels[it]||it) : it;
     const isChecked = stateSet.has(it);
     html += `<label><input type="checkbox" value="${it.replace(/"/g,'&quot;')}"${isChecked?' checked':''}> ${lab}</label>`;
   });
+  html += `</div>`;
   panel.innerHTML = html;
 
   panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
@@ -1132,11 +1212,21 @@ function buildPanel(panelId, items, stateSet, labels){
     if(panelId==='panel-month') refreshEmployeePanel();
     render();
   });
+  if(searchable){
+    const searchInput = panel.querySelector('.panel-search-box');
+    searchInput.addEventListener('input', ()=>{
+      const q = searchInput.value.trim().toLowerCase();
+      panel.querySelectorAll('.acc-panel-list label').forEach(lab=>{
+        const text = lab.textContent.trim().toLowerCase();
+        lab.style.display = (!q || text.includes(q)) ? '' : 'none';
+      });
+    });
+  }
 }
 
 function refreshEmployeePanel(){
   const scopedEmployees = [...new Set(RAW.filter(r=>state.months.has(r.month)).map(r=>r.employee).filter(Boolean))].sort();
-  buildPanel('panel-emp', scopedEmployees, state.employees);
+  buildPanel('panel-emp', scopedEmployees, state.employees, null, true);
   refreshFilterLabel('panel-emp', scopedEmployees, state.employees);
 }
 
@@ -1149,23 +1239,25 @@ function refreshFilterLabel(panelId, items, stateSet){
   else el.textContent = checkedCount + ' รายการ';
 }
 
-// toggle open/close panels
-document.querySelectorAll('.filter-btn').forEach(btn=>{
-  btn.addEventListener('click',(e)=>{
-    e.stopPropagation();
+// accordion open/close for sidebar filter groups (independent, no auto-close)
+document.querySelectorAll('.acc-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
     const targetId = btn.getAttribute('data-target');
     const panel = document.getElementById(targetId);
-    const wasOpen = panel.classList.contains('open');
-    document.querySelectorAll('.filter-panel:not(.ss-panel)').forEach(p=>p.classList.remove('open'));
-    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('open'));
-    if(!wasOpen){ panel.classList.add('open'); btn.classList.add('open'); }
+    const isOpen = panel.classList.toggle('open');
+    btn.classList.toggle('open', isOpen);
   });
 });
-document.addEventListener('click', ()=>{
-  document.querySelectorAll('.filter-panel:not(.ss-panel)').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('open'));
+
+// collapse/expand the whole filter sidebar
+document.getElementById('sidebarCollapseBtn').addEventListener('click', ()=>{
+  document.getElementById('filterSidebar').classList.add('collapsed');
+  document.getElementById('sidebarOpenBtn').style.display = 'inline-flex';
 });
-document.querySelectorAll('.filter-panel').forEach(p=>p.addEventListener('click', e=>e.stopPropagation()));
+document.getElementById('sidebarOpenBtn').addEventListener('click', ()=>{
+  document.getElementById('filterSidebar').classList.remove('collapsed');
+  document.getElementById('sidebarOpenBtn').style.display = 'none';
+});
 
 document.getElementById('resetBtn').addEventListener('click',()=>{
   document.getElementById('searchBox').value='';
@@ -1257,7 +1349,7 @@ function render(){
 
 function renderEmptyState(){
   ['kpiGrid'].forEach(id=>document.getElementById(id).innerHTML='');
-  document.getElementById('tableBody').innerHTML = `<tr><td colspan="11" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
+  document.getElementById('tableBody').innerHTML = `<tr><td colspan="13" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
   document.getElementById('pageInfo').textContent = '0 รายการ';
   ['trendChart','deptChart','incentiveChart','customerChart','defectChart'].forEach(destroyChart);
   document.getElementById('gaugeList').innerHTML = `<div class="empty-state">ไม่มีข้อมูล</div>`;
@@ -1282,7 +1374,7 @@ function renderKPIs(data){
     {label:'มูลค่าผลิตรวม', value:fmtNum(totalValue,0), unit:'฿', sub:'จำนวนชิ้น × ต้นทุน/ชิ้น', cls:''},
     {label:'ส่วนเกินเป้าสะสม', value:fmtNum(totalExcess,0), unit:'฿', sub: totalExcess>=0?'สุทธิเป็นบวก':'สุทธิเป็นลบ', cls: totalExcess>=0?'good':'bad'},
     {label:'ของเสียสะสม', value:fmtNum(totalDefects), unit:'ชิ้น', sub:`จาก ${data.length.toLocaleString()} รายการ`, cls: totalDefects>0?'bad':'good'},
-    {label:'พนักงานที่ทำงาน', value:fmtNum(activeEmployees), unit:'คน', sub:`รวม ${fmtNum(totalHours,0)} ชม.ทำงาน`, cls:''},
+    {label:'ชั่วโมงการทำงานรวม', value:fmtNum(totalHours,0), unit:'ชม.', sub:`จาก ${fmtNum(activeEmployees)} คนทำงาน`, cls:''},
   ];
 
   document.getElementById('kpiGrid').innerHTML = kpis.map(k=>`
@@ -1485,8 +1577,10 @@ function renderTable(data){
       <td>${r.customer||'—'}</td>
       <td class="mono">${r.po||'—'}</td>
       <td class="mono">${r.item_code||'—'}</td>
+      <td>${r.material?cleanMaterialDisplay(r.material):'—'}</td>
       <td>${r.dept||'—'}</td>
       <td>${r.employee||'—'}</td>
+      <td class="num mono">${fmtNum(r.work_hours,1)}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
