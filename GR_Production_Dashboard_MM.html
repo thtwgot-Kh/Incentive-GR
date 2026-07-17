@@ -733,7 +733,7 @@
                 <th data-key="material">ကုန်ကြမ်း</th>
                 <th data-key="dept">ဌာန</th>
                 <th data-key="employee">ဝန်ထမ်း</th>
-                <th data-key="work_hours" class="num mono">အလုပ်ချိန် (နာရီ)</th>
+                <th data-key="machine_hours" class="num mono">အလုပ်ချိန် (နာရီ)</th>
                 <th data-key="target_100" class="num mono">ပန်းတိုင် 100%</th>
                 <th data-key="actual_pcs" class="num mono">အမှန်ထုတ်လုပ်မှု</th>
                 <th data-key="achv_pct" class="num mono">ပြည့်မီနှုန်း %</th>
@@ -1503,7 +1503,7 @@ function renderKPIs(data){
   const sumRequiredForAchv = achvRows.reduce((s,r)=>s+r.required_pcs, 0);
   const avgAchv = sumRequiredForAchv ? (sumActualForAchv / sumRequiredForAchv) * 100 : 0;
   const activeEmployees = new Set(data.map(r=>r.employee).filter(Boolean)).size;
-  const totalHours = data.reduce((s,r)=>s+(r.work_hours||0),0);
+  const totalHours = data.reduce((s,r)=>s+(r.machine_hours||0),0);
 
   const kpis = [
     {label:'စုစုပေါင်း အမှန်ထုတ်လုပ်မှု', value:fmtNum(totalActual), unit:'ခု', sub:`ပန်းတိုင် ${fmtNum(totalTarget)} ခု`, cls:''},
@@ -1717,7 +1717,7 @@ function renderTable(data){
       <td>${r.material?cleanMaterialDisplay(r.material):'—'}</td>
       <td>${r.dept?translateDept(r.dept):'—'}</td>
       <td>${r.employee?translateEmp(r.employee):'—'}</td>
-      <td class="num mono">${fmtNum(r.work_hours,1)}</td>
+      <td class="num mono">${fmtNum(r.machine_hours,1)}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
