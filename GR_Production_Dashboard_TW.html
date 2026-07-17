@@ -737,7 +737,7 @@
                 <th data-key="dept">部門</th>
                 <th data-key="employee">員工</th>
                 <th data-key="machine_hours" class="num mono">工時</th>
-                <th data-key="target_100" class="num mono">目標 100%</th>
+                <th data-key="target_95" class="num mono">目標 95%</th>
                 <th data-key="actual_pcs" class="num mono">實際產量</th>
                 <th data-key="achv_pct" class="num mono">達成率 %</th>
                 <th data-key="defects" class="num mono">不良品</th>
@@ -1517,7 +1517,7 @@ function renderEmptyState(){
 
 function renderKPIs(data){
   const totalActual = data.reduce((s,r)=>s+(r.actual_pcs||0),0);
-  const totalTarget = data.reduce((s,r)=>s+(r.target_100||0),0);
+  const totalTarget = data.reduce((s,r)=>s+(r.target_95||0),0);
   const totalValue = data.reduce((s,r)=>s+(r.value_baht||0),0);
   const totalExcess = data.reduce((s,r)=>s+(r.excess_baht||0),0);
   const totalDefects = data.reduce((s,r)=>s+(r.defects||0),0);
@@ -1741,8 +1741,8 @@ function renderTable(data){
       <td title="${materialClean?materialClean.replace(/"/g,'&quot;'):''}">${materialClean?truncateMaterial(materialClean):'—'}</td>
       <td>${r.dept?translateDept(r.dept):'—'}</td>
       <td>${r.employee?translateEmp(r.employee):'—'}</td>
-      <td class="num mono">${fmtNum(r.machine_hours,1)}</td>
-      <td class="num mono">${fmtNum(r.target_100)}</td>
+      <td class="num mono">${fmtNum(r.machine_hours,2)}</td>
+      <td class="num mono">${fmtNum(r.target_95)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
       <td class="num mono">${fmtNum(r.defects)}</td>
