@@ -733,7 +733,7 @@
                 <th data-key="material">วัตถุดิบ</th>
                 <th data-key="dept">หน่วยงาน</th>
                 <th data-key="employee">พนักงาน</th>
-                <th data-key="work_hours" class="num mono">ชม.ทำงาน</th>
+                <th data-key="machine_hours" class="num mono">ชม.ทำงาน</th>
                 <th data-key="target_100" class="num mono">เป้า 100%</th>
                 <th data-key="actual_pcs" class="num mono">ผลิตจริง</th>
                 <th data-key="achv_pct" class="num mono">% สำเร็จ</th>
@@ -1366,7 +1366,7 @@ function renderKPIs(data){
   const sumRequiredForAchv = achvRows.reduce((s,r)=>s+r.required_pcs, 0);
   const avgAchv = sumRequiredForAchv ? (sumActualForAchv / sumRequiredForAchv) * 100 : 0;
   const activeEmployees = new Set(data.map(r=>r.employee).filter(Boolean)).size;
-  const totalHours = data.reduce((s,r)=>s+(r.work_hours||0),0);
+  const totalHours = data.reduce((s,r)=>s+(r.machine_hours||0),0);
 
   const kpis = [
     {label:'ยอดผลิตจริงรวม', value:fmtNum(totalActual), unit:'ชิ้น', sub:`เป้าหมาย ${fmtNum(totalTarget)} ชิ้น`, cls:''},
@@ -1580,7 +1580,7 @@ function renderTable(data){
       <td>${r.material?cleanMaterialDisplay(r.material):'—'}</td>
       <td>${r.dept||'—'}</td>
       <td>${r.employee||'—'}</td>
-      <td class="num mono">${fmtNum(r.work_hours,1)}</td>
+      <td class="num mono">${fmtNum(r.machine_hours,1)}</td>
       <td class="num mono">${fmtNum(r.target_100)}</td>
       <td class="num mono">${fmtNum(r.actual_pcs)}</td>
       <td class="num"><span class="pill ${achvClass}">${achv!==null?achv.toFixed(1)+'%':'—'}</span></td>
