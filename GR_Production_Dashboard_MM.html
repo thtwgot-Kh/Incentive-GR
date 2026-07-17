@@ -1031,6 +1031,12 @@ function cleanMaterialDisplay(material){
   return s || material;
 }
 
+function truncateMaterial(text){
+  if(!text) return text;
+  const maxLen = Math.max(1, Math.ceil(text.length / 5));
+  return text.length > maxLen ? text.slice(0, maxLen).trim() + '…' : text;
+}
+
 const EMP_LABELS = {
   "จิณณะ BG":"ဂျင်နာ BG",
   "ซอ (พม่า)":"စော (မြန်မာ)",
@@ -1333,7 +1339,6 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
     cb.addEventListener('change',()=>{
       if(cb.checked) stateSet.add(cb.value); else stateSet.delete(cb.value);
       refreshFilterLabel(panelId, items, stateSet, labels);
-      closeAccPanel(panelId);
       state.page = 1;
       if(panelId==='panel-month') refreshEmployeePanel();
       render();
@@ -1342,7 +1347,6 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
   panel.querySelector('[data-act="all"]').addEventListener('click',()=>{
     panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=true; stateSet.add(cb.value);});
     refreshFilterLabel(panelId, items, stateSet, labels);
-    closeAccPanel(panelId);
     state.page = 1;
     if(panelId==='panel-month') refreshEmployeePanel();
     render();
@@ -1350,7 +1354,6 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
   panel.querySelector('[data-act="none"]').addEventListener('click',()=>{
     panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false; stateSet.delete(cb.value);});
     refreshFilterLabel(panelId, items, stateSet, labels);
-    closeAccPanel(panelId);
     state.page = 1;
     if(panelId==='panel-month') refreshEmployeePanel();
     render();
@@ -1391,13 +1394,20 @@ function closeAccPanel(panelId){
   if(btn) btn.classList.remove('open');
 }
 
-// accordion open/close for sidebar filter groups (independent, no auto-close)
+// accordion open/close for sidebar filter groups
 document.querySelectorAll('.acc-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const targetId = btn.getAttribute('data-target');
     const panel = document.getElementById(targetId);
     const isOpen = panel.classList.toggle('open');
     btn.classList.toggle('open', isOpen);
+  });
+});
+// clicking anywhere outside an open filter group closes it (lets multiple checkboxes be picked first)
+document.addEventListener('click', (e)=>{
+  document.querySelectorAll('.acc-panel.open').forEach(panel=>{
+    const group = panel.closest('.acc-group');
+    if(group && !group.contains(e.target)) closeAccPanel(panel.id);
   });
 });
 
@@ -1724,12 +1734,13 @@ function renderTable(data){
     const achv = computedAchvPct(r);
     const achvClass = (achv!==null && achv>=100) ? 'good':'bad';
     const excessClass = (r.excess_baht!==null && r.excess_baht>=0) ? 'good':'bad';
+    const materialClean = r.material ? cleanMaterialDisplay(r.material) : null;
     return `<tr>
       <td class="mono">${r.date_iso||'—'}</td>
       <td>${r.customer||'—'}</td>
       <td class="mono">${r.po||'—'}</td>
       <td class="mono">${r.item_code||'—'}</td>
-      <td>${r.material?cleanMaterialDisplay(r.material):'—'}</td>
+      <td title="${materialClean?materialClean.replace(/"/g,'&quot;'):''}">${materialClean?truncateMaterial(materialClean):'—'}</td>
       <td>${r.dept?translateDept(r.dept):'—'}</td>
       <td>${r.employee?translateEmp(r.employee):'—'}</td>
       <td class="num mono">${fmtNum(r.machine_hours,1)}</td>
