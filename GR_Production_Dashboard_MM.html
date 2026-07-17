@@ -587,6 +587,20 @@
       </button>
       <div class="filter-panel" id="panel-dept"></div>
     </div>
+    <div class="filter-group">
+      <span class="filter-label">ဖောက်သည်</span>
+      <button class="filter-btn" data-target="panel-customer" id="btn-customer">
+        <span id="label-customer">အားလုံး</span><span class="chev">▾</span>
+      </button>
+      <div class="filter-panel" id="panel-customer"></div>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">ထုတ်လုပ်မှု အမိန့်နံပါတ် (PO)</span>
+      <button class="filter-btn" data-target="panel-po" id="btn-po">
+        <span id="label-po">အားလုံး</span><span class="chev">▾</span>
+      </button>
+      <div class="filter-panel" id="panel-po"></div>
+    </div>
     <button class="reset-btn" id="resetBtn">✕ စစ်ထုတ်မှုအားလုံး ရှင်းရန်</button>
   </div>
 
@@ -635,7 +649,7 @@
     <h2>မူရင်းအချက်အလက် စာရင်း (Filtered Records)</h2>
     <div class="panel-note">အစီအစဉ်ချရန် ကော်လံခေါင်းစဉ်ကို နှိပ်ပါ — ကော်လံအားလုံးမှ ရှာဖွေနိုင်သည်</div>
     <div class="table-controls">
-      <input type="text" class="search-box" id="searchBox" placeholder="ရှာဖွေရန်: ဖောက်သည်, Item ကုဒ်, ကုန်ကြမ်း, ဝန်ထမ်း...">
+      <input type="text" class="search-box" id="searchBox" placeholder="ရှာဖွေရန်: ဖောက်သည်, ထုတ်လုပ်မှု အမိန့်နံပါတ် (PO), Item ကုဒ်, ကုန်ကြမ်း, ဝန်ထမ်း...">
     </div>
     <div class="table-wrap">
       <table id="dataTable">
@@ -643,6 +657,7 @@
           <tr>
             <th data-key="date_iso">ရက်စွဲ</th>
             <th data-key="customer">ဖောက်သည်</th>
+            <th data-key="po">PO အမှတ်</th>
             <th data-key="item_code">Item ကုဒ်</th>
             <th data-key="dept">ဌာန</th>
             <th data-key="employee">ဝန်ထမ်း</th>
@@ -754,13 +769,15 @@ const SNAPSHOT_DATA = JSON.parse(document.getElementById('rawData').textContent)
 
 // ---------- state ----------
 let RAW = SNAPSHOT_DATA;
-let allMonths = [], allEmployees = [], allDepts = [], monthLabels = {};
+let allMonths = [], allEmployees = [], allDepts = [], allCustomers = [], allPOs = [], monthLabels = {};
 let autoRefreshTimer = null;
 
 const state = {
   months: new Set(),
   employees: new Set(),
   depts: new Set(),
+  customers: new Set(),
+  pos: new Set(),
   search: '',
   sortKey: 'date_iso',
   sortDir: 1,
@@ -841,6 +858,8 @@ function initFromData(data){
   allMonths = [...new Set(data.map(r=>r.month))].filter(Boolean).sort();
   allEmployees = [...new Set(data.map(r=>r.employee).filter(Boolean))].sort();
   allDepts = [...new Set(data.map(r=>r.dept).filter(Boolean))].sort();
+  allCustomers = [...new Set(data.map(r=>r.customer||''))].sort();
+  allPOs = [...new Set(data.map(r=>r.po||''))].sort();
 
   monthLabels = {};
   allMonths.forEach(m=>{
@@ -852,13 +871,19 @@ function initFromData(data){
   state.months = new Set(allMonths);
   state.employees = new Set(allEmployees);
   state.depts = new Set(allDepts);
+  state.customers = new Set(allCustomers);
+  state.pos = new Set(allPOs);
   state.page = 1;
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
   refreshEmployeePanel();
   buildPanel('panel-dept', allDepts, state.depts, DEPT_LABELS);
+  buildPanel('panel-customer', allCustomers, state.customers, {'':'(မသတ်မှတ်ရသေး)'});
+  buildPanel('panel-po', allPOs, state.pos, {'':'(မသတ်မှတ်ရသေး)'});
   document.getElementById('label-month').textContent='အားလုံး';
   document.getElementById('label-dept').textContent='အားလုံး';
+  document.getElementById('label-customer').textContent='အားလုံး';
+  document.getElementById('label-po').textContent='အားလုံး';
 
   buildProductionDeptFilter(allDepts);
   groupedProduction = groupProductionData(data);
@@ -1253,7 +1278,7 @@ function refreshEmployeePanel(){
 }
 
 function refreshFilterLabel(panelId, items, stateSet){
-  const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept'};
+  const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept','panel-customer':'label-customer','panel-po':'label-po'};
   const el = document.getElementById(map[panelId]);
   const checkedCount = items.filter(it=>stateSet.has(it)).length;
   if(checkedCount===items.length) el.textContent = 'အားလုံး';
@@ -1309,6 +1334,8 @@ function getFiltered(){
     if(!state.months.has(r.month)) return false;
     if(!state.employees.has(r.employee)) return false;
     if(!state.depts.has(r.dept)) return false;
+    if(!state.customers.has(r.customer||'')) return false;
+    if(!state.pos.has(r.po||'')) return false;
     if(state.search){
       const hay = [r.customer,r.item_code,r.material,r.employee,r.dept,r.po].join(' ').toLowerCase();
       if(!hay.includes(state.search)) return false;
@@ -1367,7 +1394,7 @@ function render(){
 
 function renderEmptyState(){
   ['kpiGrid'].forEach(id=>document.getElementById(id).innerHTML='');
-  document.getElementById('tableBody').innerHTML = `<tr><td colspan="10" class="empty-state">ရွေးချယ်ထားသော စစ်ထုတ်မှုနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ</td></tr>`;
+  document.getElementById('tableBody').innerHTML = `<tr><td colspan="11" class="empty-state">ရွေးချယ်ထားသော စစ်ထုတ်မှုနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ</td></tr>`;
   document.getElementById('pageInfo').textContent = '0 ခု';
   ['trendChart','deptChart','incentiveChart','customerChart','defectChart'].forEach(destroyChart);
   document.getElementById('gaugeList').innerHTML = `<div class="empty-state">အချက်အလက် မရှိပါ</div>`;
@@ -1593,6 +1620,7 @@ function renderTable(data){
     return `<tr>
       <td class="mono">${r.date_iso||'—'}</td>
       <td>${r.customer||'—'}</td>
+      <td class="mono">${r.po||'—'}</td>
       <td class="mono">${r.item_code||'—'}</td>
       <td>${r.dept?translateDept(r.dept):'—'}</td>
       <td>${r.employee?translateEmp(r.employee):'—'}</td>
