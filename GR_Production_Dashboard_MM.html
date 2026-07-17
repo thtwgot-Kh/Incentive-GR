@@ -234,7 +234,10 @@
   }
   .acc-btn:hover{color:var(--accent);}
   .acc-btn-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-  .acc-count{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+  .acc-count{
+    font-family:var(--mono);font-size:11px;color:var(--text-dim);
+    max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
   .acc-btn.open .chev{transform:rotate(180deg);}
   .acc-panel{display:none;padding:0 2px 12px;}
   .acc-panel.open{display:block;}
@@ -1329,7 +1332,8 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
   panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change',()=>{
       if(cb.checked) stateSet.add(cb.value); else stateSet.delete(cb.value);
-      refreshFilterLabel(panelId, items, stateSet);
+      refreshFilterLabel(panelId, items, stateSet, labels);
+      closeAccPanel(panelId);
       state.page = 1;
       if(panelId==='panel-month') refreshEmployeePanel();
       render();
@@ -1337,14 +1341,16 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
   });
   panel.querySelector('[data-act="all"]').addEventListener('click',()=>{
     panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=true; stateSet.add(cb.value);});
-    refreshFilterLabel(panelId, items, stateSet);
+    refreshFilterLabel(panelId, items, stateSet, labels);
+    closeAccPanel(panelId);
     state.page = 1;
     if(panelId==='panel-month') refreshEmployeePanel();
     render();
   });
   panel.querySelector('[data-act="none"]').addEventListener('click',()=>{
     panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false; stateSet.delete(cb.value);});
-    refreshFilterLabel(panelId, items, stateSet);
+    refreshFilterLabel(panelId, items, stateSet, labels);
+    closeAccPanel(panelId);
     state.page = 1;
     if(panelId==='panel-month') refreshEmployeePanel();
     render();
@@ -1364,16 +1370,25 @@ function buildPanel(panelId, items, stateSet, labels, searchable){
 function refreshEmployeePanel(){
   const scopedEmployees = [...new Set(RAW.filter(r=>state.months.has(r.month)).map(r=>r.employee).filter(Boolean))].sort();
   buildPanel('panel-emp', scopedEmployees, state.employees, EMP_LABELS, true);
-  refreshFilterLabel('panel-emp', scopedEmployees, state.employees);
+  refreshFilterLabel('panel-emp', scopedEmployees, state.employees, EMP_LABELS);
 }
 
-function refreshFilterLabel(panelId, items, stateSet){
+function refreshFilterLabel(panelId, items, stateSet, labels){
   const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept','panel-customer':'label-customer','panel-po':'label-po'};
   const el = document.getElementById(map[panelId]);
-  const checkedCount = items.filter(it=>stateSet.has(it)).length;
-  if(checkedCount===items.length) el.textContent = 'အားလုံး';
-  else if(checkedCount===0) el.textContent = 'မရှိ';
-  else el.textContent = checkedCount + ' ခု';
+  const selected = items.filter(it=>stateSet.has(it));
+  if(selected.length===items.length) el.textContent = 'အားလုံး';
+  else if(selected.length===0) el.textContent = 'မရှိ';
+  else if(selected.length<=3) el.textContent = selected.map(it=>labels?(labels[it]||it):it).join(', ');
+  else el.textContent = selected.length + ' ခု';
+  el.title = el.textContent;
+}
+
+function closeAccPanel(panelId){
+  const panel = document.getElementById(panelId);
+  const btn = document.getElementById('btn-' + panelId.slice(6));
+  panel.classList.remove('open');
+  if(btn) btn.classList.remove('open');
 }
 
 // accordion open/close for sidebar filter groups (independent, no auto-close)
