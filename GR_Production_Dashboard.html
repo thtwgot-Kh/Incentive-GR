@@ -325,7 +325,9 @@
   }
   .search-box:focus{outline:none;border-color:var(--accent);}
   .table-wrap{overflow-x:auto;border:1px solid var(--border-soft);border-radius:10px;}
+  .table-wrap.scroll-y{max-height:340px;overflow-y:auto;}
   table{width:100%;border-collapse:collapse;font-size:12.3px;min-width:1000px;}
+  #itemSummaryTable{min-width:0;}
   thead th{
     position:sticky;top:0;background:var(--surface-2);color:var(--text-dim);
     font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
@@ -659,6 +661,13 @@
           <div class="acc-panel" id="panel-dept"></div>
         </div>
         <div class="acc-group">
+          <button class="acc-btn" data-target="panel-item" id="btn-item">
+            <span>รหัส Item</span>
+            <span class="acc-btn-right"><span class="acc-count" id="label-item">ทั้งหมด</span><span class="chev">▾</span></span>
+          </button>
+          <div class="acc-panel" id="panel-item"></div>
+        </div>
+        <div class="acc-group">
           <button class="acc-btn" data-target="panel-customer" id="btn-customer">
             <span>ลูกค้า</span>
             <span class="acc-btn-right"><span class="acc-count" id="label-customer">ทั้งหมด</span><span class="chev">▾</span></span>
@@ -679,6 +688,25 @@
 
     <div class="incentive-content">
       <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="panel table-panel" id="itemSummaryPanel">
+        <h2>สรุปยอดผลิตตาม Item ที่เลือก</h2>
+        <div class="panel-note">รวมจำนวนที่ผลิตจริงและเป้าหมาย แยกตามรหัส Item ตามตัวกรองปัจจุบัน — เลือก Item จากแถบตัวกรองด้านซ้ายเพื่อดูเฉพาะชิ้นนั้น</div>
+        <div class="table-wrap scroll-y">
+          <table id="itemSummaryTable">
+            <thead>
+              <tr>
+                <th>รหัส Item</th>
+                <th class="num mono">จำนวนรายการ</th>
+                <th class="num mono">ผลิตจริงรวม</th>
+                <th class="num mono">เป้าหมายรวม (95%)</th>
+                <th class="num mono">% สำเร็จเฉลี่ย</th>
+              </tr>
+            </thead>
+            <tbody id="itemSummaryBody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="grid2">
         <div class="panel">
@@ -847,7 +875,7 @@ const SNAPSHOT_DATA = JSON.parse(document.getElementById('rawData').textContent)
 
 // ---------- state ----------
 let RAW = SNAPSHOT_DATA;
-let allMonths = [], allEmployees = [], allDepts = [], allCustomers = [], allPOs = [], monthLabels = {};
+let allMonths = [], allEmployees = [], allDepts = [], allCustomers = [], allPOs = [], allItems = [], monthLabels = {};
 let autoRefreshTimer = null;
 
 const state = {
@@ -856,6 +884,7 @@ const state = {
   depts: new Set(),
   customers: new Set(),
   pos: new Set(),
+  items: new Set(),
   search: '',
   sortKey: 'date_iso',
   sortDir: 1,
@@ -938,6 +967,7 @@ function initFromData(data){
   allDepts = [...new Set(data.map(r=>r.dept).filter(Boolean))].sort();
   allCustomers = [...new Set(data.map(r=>r.customer||''))].sort();
   allPOs = [...new Set(data.map(r=>r.po||''))].sort();
+  allItems = [...new Set(data.map(r=>r.item_code||''))].sort();
 
   monthLabels = {};
   allMonths.forEach(m=>{
@@ -951,6 +981,7 @@ function initFromData(data){
   state.depts = new Set(allDepts);
   state.customers = new Set(allCustomers);
   state.pos = new Set(allPOs);
+  state.items = new Set(allItems);
   state.page = 1;
 
   buildPanel('panel-month', allMonths, state.months, monthLabels);
@@ -958,10 +989,12 @@ function initFromData(data){
   buildPanel('panel-dept', allDepts, state.depts, null, true);
   buildPanel('panel-customer', allCustomers, state.customers, {'':'(ไม่ระบุ)'}, true);
   buildPanel('panel-po', allPOs, state.pos, {'':'(ไม่ระบุ)'}, true);
+  buildPanel('panel-item', allItems, state.items, {'':'(ไม่ระบุ)'}, true);
   document.getElementById('label-month').textContent='ทั้งหมด';
   document.getElementById('label-dept').textContent='ทั้งหมด';
   document.getElementById('label-customer').textContent='ทั้งหมด';
   document.getElementById('label-po').textContent='ทั้งหมด';
+  document.getElementById('label-item').textContent='ทั้งหมด';
 
   buildProductionDeptFilter(allDepts);
   groupedProduction = groupProductionData(data);
@@ -1240,7 +1273,7 @@ function refreshEmployeePanel(){
 }
 
 function refreshFilterLabel(panelId, items, stateSet, labels){
-  const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept','panel-customer':'label-customer','panel-po':'label-po'};
+  const map = {'panel-month':'label-month','panel-emp':'label-emp','panel-dept':'label-dept','panel-customer':'label-customer','panel-po':'label-po','panel-item':'label-item'};
   const el = document.getElementById(map[panelId]);
   const selected = items.filter(it=>stateSet.has(it));
   if(selected.length===items.length) el.textContent = 'ทั้งหมด';
@@ -1316,6 +1349,7 @@ function getFiltered(){
     if(!state.depts.has(r.dept)) return false;
     if(!state.customers.has(r.customer||'')) return false;
     if(!state.pos.has(r.po||'')) return false;
+    if(!state.items.has(r.item_code||'')) return false;
     if(state.search){
       const hay = [r.customer,r.item_code,r.material,r.employee,r.dept,r.po].join(' ').toLowerCase();
       if(!hay.includes(state.search)) return false;
@@ -1363,6 +1397,7 @@ function render(){
   }
 
   renderKPIs(data);
+  renderItemSummary(data);
   renderTrendChart(data);
   renderDeptChart(data);
   renderIncentiveChart(data);
@@ -1374,10 +1409,40 @@ function render(){
 
 function renderEmptyState(){
   ['kpiGrid'].forEach(id=>document.getElementById(id).innerHTML='');
+  document.getElementById('itemSummaryBody').innerHTML = `<tr><td colspan="5" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
   document.getElementById('tableBody').innerHTML = `<tr><td colspan="13" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
   document.getElementById('pageInfo').textContent = '0 รายการ';
   ['trendChart','deptChart','incentiveChart','customerChart','defectChart'].forEach(destroyChart);
   document.getElementById('gaugeList').innerHTML = `<div class="empty-state">ไม่มีข้อมูล</div>`;
+}
+
+function renderItemSummary(data){
+  const body = document.getElementById('itemSummaryBody');
+  if(!body) return;
+  const map = new Map();
+  data.forEach(r=>{
+    const key = r.item_code || '(ไม่ระบุ)';
+    if(!map.has(key)) map.set(key, {item_code:key, count:0, actual:0, required:0});
+    const g = map.get(key);
+    g.count += 1;
+    g.actual += (r.actual_pcs||0);
+    g.required += (r.required_pcs||0);
+  });
+  const rows = [...map.values()].sort((a,b)=>b.actual-a.actual);
+  if(rows.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty-state">ไม่พบข้อมูลตามตัวกรองที่เลือก</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(r=>{
+    const achv = r.required ? (r.actual / r.required) * 100 : null;
+    return `<tr>
+      <td class="mono">${escapeHtml(r.item_code)}</td>
+      <td class="num mono">${fmtNum(r.count)}</td>
+      <td class="num mono">${fmtNum(r.actual)}</td>
+      <td class="num mono">${fmtNum(r.required)}</td>
+      <td class="num mono">${achv!=null ? fmtNum(achv,1)+'%' : '—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderKPIs(data){
