@@ -103,6 +103,14 @@
     padding:8px 14px;border-radius:999px;white-space:nowrap;
   }
   .meta-chip b{color:var(--text);font-weight:600;}
+  .meta-chip-group{display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
+  .freshness-chip{transition:color .2s,border-color .2s,background .2s;cursor:help;}
+  .freshness-chip.fresh-ok{border-color:var(--good);color:var(--good);}
+  .freshness-chip.fresh-ok b{color:var(--good);}
+  .freshness-chip.fresh-warn{border-color:var(--warn);color:var(--warn);background:rgba(232,193,62,.08);}
+  .freshness-chip.fresh-warn b{color:var(--warn);}
+  .freshness-chip.fresh-stale{border-color:var(--bad);color:var(--bad);background:rgba(224,97,110,.10);}
+  .freshness-chip.fresh-stale b{color:var(--bad);}
 
   /* Connect bar */
   .connect-bar{
@@ -611,7 +619,10 @@
       <h1>每日生產 &amp; 員工獎勵金儀表板</h1>
       <div class="subtitle">實際產量對比目標、超額獎勵金與個人績效總覽 — 資料來源：GR PF 報表</div>
     </div>
-    <div class="meta-chip">資料期間 <b id="dateRangeChip">—</b> ・ <b id="rowCountChip">0</b> 筆</div>
+    <div class="meta-chip-group">
+      <div class="meta-chip">資料期間 <b id="dateRangeChip">—</b> ・ <b id="rowCountChip">0</b> 筆</div>
+      <div class="meta-chip freshness-chip" id="freshnessChip" hidden>—</div>
+    </div>
   </header>
 
   <div class="connect-bar" id="connectBar">
@@ -1000,7 +1011,57 @@ function initFromData(data){
   groupedProduction = groupProductionData(data);
   renderProduction();
 
+  renderFreshness(data);
   render();
+}
+
+// ---------- data freshness ----------
+// เตือนเมื่อไม่มีการกรอกข้อมูลใหม่เข้า Google Sheet
+// นับเฉพาะวันทำการ (ข้ามวันอาทิตย์) เพื่อไม่ให้ขึ้นเตือนผิดพลาดทุกเช้าวันจันทร์
+const FRESH_MAX_OK = 1;    // <= 1 วันทำการ = ปกติ
+const FRESH_MAX_WARN = 3;  // 2-3 วันทำการ = เริ่มผิดปกติ, มากกว่านั้น = ค้างแน่นอน
+const FRESH_T = {
+  label: '最新資料',
+  today: '今日已更新',
+  age: n => '已停滯 ' + n + ' 個工作天',
+  tip: 'Google Sheet 中最新的資料日期（僅計工作天，不含週日）— 若停滯多天代表尚未有人輸入新資料，並非儀表板故障'
+};
+
+function workingDaysSince(fromIso, now){
+  const p = fromIso.split('-').map(Number);
+  const cur = new Date(p[0], p[1] - 1, p[2]);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let n = 0;
+  while(cur < end){
+    cur.setDate(cur.getDate() + 1);
+    if(cur.getDay() !== 0) n++;   // 0 = วันอาทิตย์ (โรงงานหยุด)
+  }
+  return n;
+}
+
+function renderFreshness(data){
+  const el = document.getElementById('freshnessChip');
+  if(!el) return;
+  let maxIso = '';
+  for(const r of data){ if(r.date_iso && r.date_iso > maxIso) maxIso = r.date_iso; }
+  if(!maxIso){ el.hidden = true; return; }
+  el.hidden = false;
+
+  const p = maxIso.split('-');
+  const shown = Number(p[2]) + '/' + Number(p[1]) + '/' + p[0];
+  const age = workingDaysSince(maxIso, new Date());
+
+  let cls, note;
+  if(age <= FRESH_MAX_OK){
+    cls = 'fresh-ok';
+    note = age === 0 ? FRESH_T.today : FRESH_T.age(age);
+  }else{
+    cls = age <= FRESH_MAX_WARN ? 'fresh-warn' : 'fresh-stale';
+    note = FRESH_T.age(age);
+  }
+  el.className = 'meta-chip freshness-chip ' + cls;
+  el.innerHTML = FRESH_T.label + ' <b>' + shown + '</b> · ' + note;
+  el.title = FRESH_T.tip;
 }
 
 // ---------- Production GR: search & filter view ----------
