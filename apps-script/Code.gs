@@ -15,10 +15,29 @@
  * -------------------------------------------------------------------------
  */
 
+// เลขเวอร์ชันของสคริปต์ ตอบกลับใน ?meta=1 เพื่อให้เช็คได้ทันทีว่า
+// deployment ที่ใช้งานอยู่เป็นโค้ดชุดนี้จริงหรือยังเป็นตัวเก่า
+var SCRIPT_VERSION = '2026-08-11';
+
 var SHEET_NAME = 'GR';
 
 // ต้องตรงกับค่า AUTH_HASH ในไฟล์ HTML (sha256 ของรหัสผ่านเข้าใช้งาน)
 var EXPECTED_KEY_HASH = 'fb8da96a6ac06bda69cddfc23e875dbad850043989033f66e42acbb5c6ce91c9';
+
+// ID ของไฟล์ Sheet — ใช้เป็นตัวสำรองเมื่อสคริปต์ไม่ได้ผูกกับชีต
+var SPREADSHEET_ID = '1BzoN9wgODkAYUZrgJFp-ME-S53z4l0q4GjTzt5QeDxk';
+
+/**
+ * getActiveSpreadsheet() ใช้ได้เฉพาะสคริปต์ที่ผูกกับไฟล์ Sheet (สร้างจาก
+ * ส่วนขยาย → Apps Script) ถ้าเป็นโปรเจกต์เดี่ยวจะคืน null แล้วพังทั้งหมด
+ * จึงเปิดด้วย ID แทนในกรณีนั้น ทำให้โค้ดชุดเดียวใช้ได้กับทั้งสองแบบ
+ */
+function openSpreadsheet() {
+  var ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (err) { ss = null; }
+  if (!ss) ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return ss;
+}
 
 /**
  * พารามิเตอร์ที่รองรับ (ทุกตัวเป็น optional — ไม่ใส่ = ได้ข้อมูลทั้งหมดเหมือนเดิม)
@@ -36,9 +55,15 @@ function doGet(e) {
       return jsonResponse({ error: 'Unauthorized: missing or invalid key' });
     }
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    var ss = openSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) {
-      return jsonResponse({ error: 'ไม่พบชีตชื่อ "' + SHEET_NAME + '" ในไฟล์นี้' });
+      // บอกชื่อชีตที่มีจริงไปด้วย จะได้รู้ทันทีว่าเปิดผิดไฟล์หรือชีตถูกเปลี่ยนชื่อ
+      var names = ss.getSheets().map(function (s) { return s.getName(); });
+      return jsonResponse({
+        error: 'ไม่พบชีตชื่อ "' + SHEET_NAME + '" ในไฟล์ "' + ss.getName() + '"',
+        available_sheets: names
+      });
     }
 
     var lastCol = sheet.getLastColumn();
@@ -80,6 +105,8 @@ function doGet(e) {
         if (!lastIso || iso > lastIso) lastIso = iso;
       }
       return jsonResponse({
+        script_version: SCRIPT_VERSION,
+        spreadsheet: ss.getName(),
         rows: count,
         last_date: lastIso,
         last_data_row: lastDataRow,
