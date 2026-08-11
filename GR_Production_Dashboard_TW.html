@@ -1042,8 +1042,14 @@ function workingDaysSince(fromIso, now){
 function renderFreshness(data){
   const el = document.getElementById('freshnessChip');
   if(!el) return;
+  // รับเฉพาะรูปแบบ YYYY-MM-DD เท่านั้น — กันค่าเพี้ยนจาก Apps Script รุ่นที่ยัง
+  // ไม่รองรับปี 2 หลัก แถวที่กรอก "16/7/26" จะถูกแปลงเป็น "26-07-16" ซึ่งเรียง
+  // แบบ string แล้วมากกว่า "2026-07-23" จึงถูกเลือกเป็นวันล่าสุดผิด ๆ
   let maxIso = '';
-  for(const r of data){ if(r.date_iso && r.date_iso > maxIso) maxIso = r.date_iso; }
+  for(const r of data){
+    const d = r.date_iso;
+    if(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d > maxIso) maxIso = d;
+  }
   if(!maxIso){ el.hidden = true; return; }
   el.hidden = false;
 
