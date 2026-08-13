@@ -905,6 +905,8 @@ const state = {
 
 // ---------- live connection ----------
 const LS_KEY = 'gr_dashboard_sheet_url';
+const AUTO_REFRESH_LS_KEY = 'gr_dashboard_auto_refresh_ms';
+const DEFAULT_AUTO_REFRESH_MS = 30000;
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwHVMW050_MJ4X28OoW7Krcp57QwKKRZjVshk-r3ICAmpJGc13yyaFlaOaGTnYQObklpg/exec';
 
 function setConnStatus(mode, text){
@@ -954,6 +956,7 @@ document.getElementById('autoRefreshSelect').addEventListener('change', applyAut
 function applyAutoRefresh(){
   if(autoRefreshTimer){ clearInterval(autoRefreshTimer); autoRefreshTimer=null; }
   const ms = parseInt(document.getElementById('autoRefreshSelect').value, 10);
+  localStorage.setItem(AUTO_REFRESH_LS_KEY, String(ms));
   if(ms > 0){
     autoRefreshTimer = setInterval(()=>{
       const url = document.getElementById('sheetUrlInput').value.trim() || localStorage.getItem(LS_KEY);
@@ -965,10 +968,13 @@ function applyAutoRefresh(){
 // try auto-connect: localStorage override takes priority, else use baked-in default URL
 (function autoConnectFromStorage(){
   const saved = localStorage.getItem(LS_KEY) || DEFAULT_SHEET_URL;
+  const savedAutoRefreshMs = localStorage.getItem(AUTO_REFRESH_LS_KEY);
+  document.getElementById('autoRefreshSelect').value = (savedAutoRefreshMs !== null) ? savedAutoRefreshMs : String(DEFAULT_AUTO_REFRESH_MS);
   if(saved){
     document.getElementById('sheetUrlInput').value = saved;
     fetchLive(saved);
   }
+  applyAutoRefresh();
 })();
 
 // ---------- init / rebuild filters when data changes ----------
