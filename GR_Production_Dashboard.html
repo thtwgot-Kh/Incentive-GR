@@ -913,7 +913,12 @@ const state = {
 const LS_KEY = 'gr_dashboard_sheet_url';
 const AUTO_REFRESH_LS_KEY = 'gr_dashboard_auto_refresh_ms';
 const DEFAULT_AUTO_REFRESH_MS = 30000;
-const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwHVMW050_MJ4X28OoW7Krcp57QwKKRZjVshk-r3ICAmpJGc13yyaFlaOaGTnYQObklpg/exec';
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx7XdoxIeVRbA4vgg_U-kLRQ5KFq58_99BzrC_zdcG52UEAf98tEWxhx9NP_OxV8SIIUQ/exec';
+// URL deployment เก่าที่เลิกอัปเดตแล้ว (2026-08) — ล้างออกจาก localStorage ของเครื่องที่
+// เคยเชื่อมต่อค้างไว้ ไม่งั้นจะเจอ URL เก่านี้ทับ DEFAULT_SHEET_URL ตัวใหม่ตลอดไป
+const STALE_SHEET_URLS = [
+  'https://script.google.com/macros/s/AKfycbwHVMW050_MJ4X28OoW7Krcp57QwKKRZjVshk-r3ICAmpJGc13yyaFlaOaGTnYQObklpg/exec'
+];
 
 function setConnStatus(mode, text){
   const dot = document.getElementById('connDot');
@@ -975,6 +980,7 @@ function applyAutoRefresh(){
 
 // try auto-connect: localStorage override takes priority, else use baked-in default URL
 (function autoConnectFromStorage(){
+  if(STALE_SHEET_URLS.includes(localStorage.getItem(LS_KEY))) localStorage.removeItem(LS_KEY);
   const saved = localStorage.getItem(LS_KEY) || DEFAULT_SHEET_URL;
   const savedAutoRefreshMs = localStorage.getItem(AUTO_REFRESH_LS_KEY);
   document.getElementById('autoRefreshSelect').value = (savedAutoRefreshMs !== null) ? savedAutoRefreshMs : String(DEFAULT_AUTO_REFRESH_MS);
