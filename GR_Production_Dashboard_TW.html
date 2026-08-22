@@ -529,44 +529,61 @@
     padding:6px 10px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint);
     border-bottom:1px solid var(--border);margin-bottom:4px;
   }
-  /* Production planner (คำนวณแผนผลิตตาม Item) */
+  /* Production planner (คำนวณแผนผลิต) */
   .plan-num{min-width:130px;width:100%;text-align:right;font-family:var(--mono);}
   .plan-num::-webkit-calendar-picker-indicator{filter:invert(.7);}
+  .plan-add-bar{margin-top:-10px;}
+  .plan-add-btn{align-self:stretch;white-space:nowrap;}
   .kpi .value.plan-text{font-size:17px;line-height:1.4;}
-  #planStepTable{min-width:1000px;}
+  .plan-step-table{min-width:1020px;}
   .plan-cell-input{
     width:84px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
     padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:12px;text-align:right;
   }
   .plan-cell-input:focus{outline:none;border-color:var(--accent);}
+  .plan-cell-input.manual{border-color:var(--accent);}
   .plan-move{
     background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;
     cursor:pointer;font-size:9px;line-height:1;padding:3px 4px;
   }
   .plan-move:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
   .plan-move:disabled{opacity:.25;cursor:default;}
+  .plan-move.plan-del{font-size:11px;padding:3px 7px;}
+  .plan-move.plan-del:hover{border-color:var(--bad);color:var(--bad);}
   .plan-seq{display:flex;align-items:center;gap:5px;}
   .plan-seq-no{font-family:var(--mono);font-size:12px;color:var(--text-faint);width:14px;}
   .plan-src{font-family:var(--mono);font-size:10px;color:var(--text-faint);white-space:nowrap;}
   .plan-src.manual{color:var(--accent);}
   .plan-src.guess{color:var(--warn);}
+  .plan-material{font-size:11.5px;color:var(--text-dim);line-height:1.5;max-width:260px;}
   .plan-tot td{border-top:1px solid var(--border);font-weight:600;color:var(--text);}
-  .plan-timeline{display:flex;flex-direction:column;gap:8px;}
-  .plan-tl-row{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;}
-  .plan-tl-name{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .plan-sep td{
     background:var(--bg-2);color:var(--text-dim);font-size:11.5px;letter-spacing:.02em;
     border-top:1px solid var(--border);
   }
-  .plan-tl-bar.standalone{opacity:.55;}
-  .plan-tl-sep{
-    font-size:11px;color:var(--text-faint);margin:6px 0 2px;padding-top:8px;
-    border-top:1px dashed var(--border);
-  }
+  /* Item card */
+  .plan-job{margin-bottom:16px;}
+  .plan-job-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
+  .plan-job-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .plan-job-no{font-family:var(--mono);font-size:12px;color:var(--text-faint);}
+  .plan-job-item{font-family:var(--mono);font-size:15.5px;font-weight:600;color:var(--accent);}
+  .plan-job-dates{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);}
+  .plan-job-tools{display:flex;align-items:center;gap:6px;}
+  .plan-job-qty{font-size:11.5px;color:var(--text-dim);display:flex;align-items:center;gap:6px;margin-right:6px;}
+  /* Timeline */
+  .plan-timeline{display:flex;flex-direction:column;gap:8px;}
+  .plan-tl-row{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;}
+  .plan-tl-name{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .plan-tl-track{position:relative;height:22px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:5px;}
   .plan-tl-bar{
     position:absolute;top:0;bottom:0;border-radius:4px;min-width:3px;display:flex;align-items:center;
     padding:0 6px;font-family:var(--mono);font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;
+  }
+  .plan-tl-bar.standalone{opacity:.55;}
+  .plan-tl-job{font-family:var(--mono);font-size:11.5px;color:var(--accent);margin:10px 0 0;}
+  .plan-tl-sep{
+    font-size:11px;color:var(--text-faint);margin:6px 0 2px;padding-top:8px;
+    border-top:1px dashed var(--border);
   }
   .plan-empty{padding:50px;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
   .plan-assume{margin-top:16px;}
@@ -672,24 +689,21 @@
     <header class="top">
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION PLANNER</div>
-        <h1>依 Item 計算生產排程</h1>
-        <div class="subtitle">選擇 Item 代碼並輸入需生產的數量，系統會依歷史資料中實際記錄的生產速率逐站計算 — 速率、並行機台數與站別順序皆可自行調整</div>
+        <h1>生產排程計算</h1>
+        <div class="subtitle">填入客戶名稱與製令編號，再逐筆加入要生產的 Item，系統會依歷史實際生產速率逐站計算工時與日期 — 速率、並行機台數、應投入數量、站別順序與 Item 順序皆可自行調整</div>
       </div>
-      <div class="meta-chip">共 <b id="planStepCount">0</b> 個站別</div>
+      <div class="meta-chip">排程內 Item <b id="planJobCount">0</b> 筆</div>
     </header>
 
     <div class="prod-search-bar">
-      <div class="filter-group ss-group" style="flex:1.6;min-width:220px;">
-        <span class="filter-label">Item 代碼</span>
-        <div class="ss-control" id="ssPlanItemControl">
-          <input type="text" id="planSearchItem" class="search-box" placeholder="搜尋 / 選擇 Item 代碼..." autocomplete="off">
-          <button class="ss-clear" id="ssPlanItemClear" title="清除" type="button">✕</button>
-        </div>
-        <div class="filter-panel ss-panel" id="ssPlanItemPanel"></div>
+      <div class="filter-group" style="flex:1.3;min-width:190px;">
+        <span class="filter-label">客戶名稱</span>
+        <input type="text" id="planCustomer" class="search-box" list="planCustomerList" placeholder="輸入或從既有名單選擇..." autocomplete="off">
+        <datalist id="planCustomerList"></datalist>
       </div>
-      <div class="filter-group">
-        <span class="filter-label">需生產數量（件）</span>
-        <input type="number" id="planQty" class="search-box plan-num" min="1" step="1" value="1000">
+      <div class="filter-group" style="flex:1;min-width:160px;">
+        <span class="filter-label">製令編號</span>
+        <input type="text" id="planPO" class="search-box" placeholder="例如 26006" autocomplete="off">
       </div>
       <div class="filter-group">
         <span class="filter-label">每日工時</span>
@@ -710,6 +724,25 @@
           <option value="target_100">目標 100%</option>
           <option value="actual">歷史平均實際速率</option>
         </select>
+      </div>
+    </div>
+
+    <div class="prod-search-bar plan-add-bar">
+      <div class="filter-group ss-group" style="flex:1.6;min-width:220px;">
+        <span class="filter-label">Item 代碼</span>
+        <div class="ss-control" id="ssPlanItemControl">
+          <input type="text" id="planSearchItem" class="search-box" placeholder="搜尋 / 選擇 Item 代碼..." autocomplete="off">
+          <button class="ss-clear" id="ssPlanItemClear" title="清除" type="button">✕</button>
+        </div>
+        <div class="filter-panel ss-panel" id="ssPlanItemPanel"></div>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">需生產數量（件）</span>
+        <input type="number" id="planQty" class="search-box plan-num" min="1" step="1" value="1000">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">&nbsp;</span>
+        <button class="connect-btn plan-add-btn" id="planAddBtn">＋ 加入排程</button>
       </div>
     </div>
 
@@ -1553,25 +1586,40 @@ function renderProduction(){
 }
 
 
-// ---------- Production planner: คำนวณแผนผลิตจาก Item ที่เลือก ----------
-//
-// ข้อมูลใน Sheet ไม่มีคอลัมน์ลำดับขั้นตอน (step order) — มีแต่ "หน่วยงาน" ราย
-// บรรทัดที่บอกว่างานนั้นทำที่ขั้นตอนไหน โมดูลนี้จึงเรียงลำดับขั้นตอนขึ้นมาเอง
-// จากวันที่บันทึกงานจริง (ขั้นตอนที่ถูกบันทึกก่อนในใบสั่งผลิตเดียวกัน = อยู่ต้นสาย)
-// ถ้า Item ที่เลือกมีประวัติไม่พอ จะใช้ลำดับเฉลี่ยจากทุก Item แทน และผู้ใช้กด ▲▼
-// แก้ลำดับเองได้เสมอ — ตัวเลขที่คำนวณได้จึงเป็น "ประมาณการ" ไม่ใช่เส้นทางผลิตที่ยืนยันแล้ว
+// ---------- Production planner: คำนวณแผนผลิต (หลาย Item ต่อหนึ่งใบสั่งผลิต) ----------
 
+/**
+ * ลำดับขั้นตอนมาตรฐานของสายผลิต — ยืนยันจากหน้างาน (ส.ค. 2026)
+ * ชีตไม่มีคอลัมน์ step order จึงต้องเก็บลำดับไว้ที่นี่ ถ้าสายผลิตเปลี่ยน แก้ที่ลิสต์นี้ที่เดียว
+ */
+const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตัดยาง','ทากาว','เจียร์','เจียร์(หยาบ)','เจียร์(ละเอียด)','เจาะ'];
+
+// ขั้นตอนที่ไม่ได้ผ่านทุกงาน — ทำเฉพาะบอลบางไซส์
+const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
+
+/**
+ * ตำแหน่งของหน่วยงานในสายหลัก — 1 = ต้นสาย, null = ไม่ได้อยู่ในสายหลัก
+ *
+ * หน่วยงานที่ไม่อยู่ใน STEP_ORDER เป็น "ขั้นตอนแยก" ไม่ได้ต่อจากขั้นตอนใด
+ * (ยืนยันจากหน้างาน) จึงไม่เดาตำแหน่งให้ แต่แยกไปคิดเวลาต่างหาก และไม่นับ
+ * รวมในวันที่เสร็จของสายหลัก
+ */
+function standardStepRank(dept){
+  const i = STEP_ORDER.indexOf(dept);
+  return i !== -1 ? {rank: i + 1, src: 'standard'} : {rank: null, src: 'standalone'};
+}
+
+// หนึ่งแผน = ลูกค้า + เลขที่ใบสั่งผลิต + รายการ Item ที่ต้องผลิตเรียงตามลำดับที่จะขึ้นงาน
 const planState = {
-  item: '',
-  qty: 1000,
+  customer: '',
+  po: '',
   hoursPerDay: 8,
   startIso: '',
   scrapPct: 0,
   rateBasis: 'target_95',
-  steps: [],       // [{dept, ...สถิติย้อนหลัง}] เรียงตามลำดับที่จะผลิตจริง
-  order: [],       // ลำดับที่ผู้ใช้จัดเอง (ชื่อหน่วยงาน) — คงไว้เมื่อข้อมูลรีเฟรช
-  overrides: {}    // dept -> {rate, stations} ค่าที่ผู้ใช้พิมพ์ทับ
+  jobs: []   // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
 };
+let planJobUid = 0;
 
 function planTodayIso(){
   const d = new Date();
@@ -1604,47 +1652,32 @@ function planAddWorkingDays(iso, days){
   const dd = String(d.getDate()).padStart(2,'0');
   return d.getFullYear() + '-' + mm + '-' + dd;
 }
-
-/**
- * ลำดับขั้นตอนมาตรฐานของสายผลิต — ยืนยันจากหน้างาน (ส.ค. 2026)
- * ชีตไม่มีคอลัมน์ step order จึงต้องเก็บลำดับไว้ที่นี่ ถ้าสายผลิตเปลี่ยน แก้ที่ลิสต์นี้ที่เดียว
- */
-const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตัดยาง','ทากาว','เจียร์','เจียร์(หยาบ)','เจียร์(ละเอียด)','เจาะ'];
-
-// ขั้นตอนที่ไม่ได้ผ่านทุกงาน — ทำเฉพาะบอลบางไซส์
-const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
-
-/**
- * ตำแหน่งของหน่วยงานในสายหลัก — 1 = ต้นสาย, null = ไม่ได้อยู่ในสายหลัก
- *
- * หน่วยงานที่ไม่อยู่ใน STEP_ORDER เป็น "ขั้นตอนแยก" ไม่ได้ต่อจากขั้นตอนใด
- * (ยืนยันจากหน้างาน) จึงไม่เดาตำแหน่งให้ แต่แยกไปคิดเวลาต่างหาก และไม่นับ
- * รวมในวันที่เสร็จของสายหลัก
- */
-function standardStepRank(dept){
-  const i = STEP_ORDER.indexOf(dept);
-  return i !== -1 ? {rank: i + 1, src: 'standard'} : {rank: null, src: 'standalone'};
+function planShortMaterial(text){
+  if(!text) return '';
+  return text.length > 46 ? text.slice(0,46).trim() + '…' : text;
 }
 
-/** สรุปสถิติย้อนหลังของ Item ที่เลือก แยกตามขั้นตอน (หน่วยงาน) */
-function buildPlanSteps(item){
+function planItemOptions(){
+  return [...new Set(RAW.filter(r=> r.item_code && r.dept).map(r=>r.item_code))].sort();
+}
+
+/** สรุปสถิติย้อนหลังของ Item หนึ่ง แยกตามขั้นตอน (หน่วยงาน) */
+function buildPlanSteps(item, userOrder){
   const rows = RAW.filter(r=> (r.item_code||'') === item && r.dept);
   const byDept = new Map();
   rows.forEach(r=>{
     let s = byDept.get(r.dept);
     if(!s){
-      s = {dept:r.dept, n:0, actual:0, hours:0, defects:0, t95:[], t100:[], cost:[], workers:[], last:''};
+      s = {dept:r.dept, n:0, actual:0, hours:0, t95:[], t100:[], material:'', material_date:''};
       byDept.set(r.dept, s);
     }
     s.n++;
     if(r.actual_pcs) s.actual += r.actual_pcs;
     if(r.machine_hours) s.hours += r.machine_hours;
-    if(r.defects) s.defects += r.defects;
     if(r.target_95) s.t95.push(r.target_95);
     if(r.target_100) s.t100.push(r.target_100);
-    if(r.cost_per_pc != null) s.cost.push(r.cost_per_pc);
-    if(r.num_workers) s.workers.push(r.num_workers);
-    if((r.date_iso||'') > s.last) s.last = r.date_iso || '';
+    // วัตถุดิบของ Item เดียวกันเปลี่ยนได้ตามงาน จึงยึดชื่อจากบรรทัดล่าสุดของขั้นตอนนั้น
+    if(r.material && (r.date_iso||'') >= s.material_date){ s.material = r.material; s.material_date = r.date_iso || ''; }
   });
 
   const steps = [...byDept.values()];
@@ -1652,12 +1685,11 @@ function buildPlanSteps(item){
     s.rate_target_95 = planMedian(s.t95);
     s.rate_target_100 = planMedian(s.t100);
     s.rate_actual = s.hours > 0 ? s.actual / s.hours : null;
-    s.cost_per_pc = planMedian(s.cost);
-    s.defect_pct = (s.actual + s.defects) > 0 ? (s.defects/(s.actual + s.defects))*100 : 0;
     const rank = standardStepRank(s.dept);
     s.rank = rank.rank;
     s.rank_src = rank.src;
   });
+
   // สายหลักเรียงตาม STEP_ORDER ส่วนขั้นตอนแยกไปต่อท้าย เรียงตามชื่อ
   const byRoute = (a,b)=>{
     if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
@@ -1667,11 +1699,11 @@ function buildPlanSteps(item){
   steps.sort(byRoute);
 
   // ผู้ใช้เคยจัดลำดับสายหลักเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
-  if(planState.order.length){
+  if(userOrder && userOrder.length){
     steps.sort((a,b)=>{
       if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
       if(a.rank == null) return byRoute(a,b);
-      const ia = planState.order.indexOf(a.dept), ib = planState.order.indexOf(b.dept);
+      const ia = userOrder.indexOf(a.dept), ib = userOrder.indexOf(b.dept);
       if(ia === -1 && ib === -1) return byRoute(a,b);
       if(ia === -1) return 1;
       if(ib === -1) return -1;
@@ -1681,9 +1713,25 @@ function buildPlanSteps(item){
   return steps;
 }
 
+function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
+
+function planAddJob(item, qty){
+  if(!item) return false;
+  planState.jobs.push({
+    uid: ++planJobUid,
+    item: item,
+    qty: qty > 0 ? qty : 1,
+    steps: buildPlanSteps(item, []),
+    order: [],
+    overrides: {}
+  });
+  renderPlanner();
+  return true;
+}
+
 /** อัตราการผลิตที่จะใช้คำนวณของขั้นตอนหนึ่ง (ชิ้น/ชม.) ตามฐานที่เลือก */
-function planStepRate(step){
-  const ov = planState.overrides[step.dept];
+function planStepRate(step, job){
+  const ov = job.overrides[step.dept];
   if(ov && ov.rate > 0) return {rate: ov.rate, src: 'manual'};
   const order = planState.rateBasis === 'actual' ? ['rate_actual','rate_target_95','rate_target_100']
               : planState.rateBasis === 'target_100' ? ['rate_target_100','rate_target_95','rate_actual']
@@ -1693,81 +1741,109 @@ function planStepRate(step){
   }
   return {rate: null, src: null};
 }
-function planStepStations(step){
-  const ov = planState.overrides[step.dept];
-  if(ov && ov.stations > 0) return ov.stations;
-  return 1;
+function planStepStations(step, job){
+  const ov = job.overrides[step.dept];
+  return (ov && ov.stations > 0) ? ov.stations : 1;
 }
 
 /**
- * คำนวณแผน: เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
- * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
+ * คำนวณทั้งแผน — Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)
+ * ภายใน Item เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
+ * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องส่งมอบ ถ้าผู้ใช้พิมพ์จำนวน "ต้องทำ" เองที่
+ * ขั้นตอนไหน ให้ยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไป
  */
 function computePlan(){
-  const qty = planState.qty > 0 ? planState.qty : 0;
   const hpd = planState.hoursPerDay > 0 ? planState.hoursPerDay : 8;
   const keep = 1 - Math.min(90, Math.max(0, planState.scrapPct))/100;
   const startIso = planState.startIso || planTodayIso();
 
-  const main = planState.steps.filter(s=> s.rank != null).map(s=>({step:s}));
-  const extra = planState.steps.filter(s=> s.rank == null).map(s=>({step:s}));
-
-  // สายหลัก: เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
-  // ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
-  let need = qty;
-  for(let i = main.length-1; i >= 0; i--){
-    main[i].qty_out = need;
-    main[i].qty_in = keep > 0 ? need/keep : need;
-    need = main[i].qty_in;
-  }
-  // ขั้นตอนแยกไม่ได้อยู่ในโซ่นี้ จึงเผื่อของเสียชั้นเดียวจากยอดที่ต้องการ
-  extra.forEach(r=>{ r.qty_out = qty; r.qty_in = keep > 0 ? qty/keep : qty; });
-
-  function fillRow(r){
-    const {rate, src} = planStepRate(r.step);
-    r.rate = rate;
-    r.rate_src = src;
-    r.stations = planStepStations(r.step);
-    r.hours = (rate && rate > 0) ? r.qty_in/(rate*r.stations) : null;
-    r.days = r.hours != null ? r.hours/hpd : null;
-    r.cost = (r.step.cost_per_pc != null) ? r.qty_in*r.step.cost_per_pc : null;
-  }
-
   let cum = 0;
-  main.forEach(r=>{
-    fillRow(r);
-    r.start_day = cum;
-    if(r.days != null) cum += r.days;
-    r.end_day = cum;
-    r.start_iso = r.days != null ? planAddWorkingDays(startIso, Math.floor(r.start_day)) : null;
-    r.end_iso = r.days != null ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1)) : null;
-  });
-  // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากวันที่ 0 เท่านั้น
-  extra.forEach(r=>{ fillRow(r); r.start_day = 0; r.end_day = r.days || 0; r.start_iso = null; r.end_iso = null; });
+  const jobs = planState.jobs.map(job=>{
+    const qty = job.qty > 0 ? job.qty : 0;
+    const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
+    const extra = job.steps.filter(s=> s.rank == null).map(s=>({step:s}));
 
-  const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
-  const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
-  const mainCost = sum(main,'cost'), extraCost = sum(extra,'cost');
-  const rows = main.concat(extra);
+    const manualQty = (r)=>{
+      const ov = job.overrides[r.step.dept];
+      return (ov && ov.qty > 0) ? ov.qty : null;
+    };
+    let need = qty;
+    for(let i = main.length-1; i >= 0; i--){
+      const manual = manualQty(main[i]);
+      main[i].qty_out = need;
+      main[i].qty_in = manual != null ? manual : (keep > 0 ? need/keep : need);
+      main[i].qty_manual = manual != null;
+      need = main[i].qty_in;
+    }
+    // ขั้นตอนแยกไม่ได้อยู่ในโซ่นี้ จึงเผื่อของเสียชั้นเดียวจากยอดที่ต้องการ
+    extra.forEach(r=>{
+      const manual = manualQty(r);
+      r.qty_out = qty;
+      r.qty_in = manual != null ? manual : (keep > 0 ? qty/keep : qty);
+      r.qty_manual = manual != null;
+    });
+
+    function fillRow(r){
+      const {rate, src} = planStepRate(r.step, job);
+      r.rate = rate;
+      r.rate_src = src;
+      r.stations = planStepStations(r.step, job);
+      r.hours = (rate && rate > 0) ? r.qty_in/(rate*r.stations) : null;
+      r.days = r.hours != null ? r.hours/hpd : null;
+    }
+
+    const jobStartDay = cum;
+    main.forEach(r=>{
+      fillRow(r);
+      r.start_day = cum;
+      if(r.days != null) cum += r.days;
+      r.end_day = cum;
+      r.start_iso = r.days != null ? planAddWorkingDays(startIso, Math.floor(r.start_day)) : null;
+      r.end_iso = r.days != null ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1)) : null;
+    });
+    // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากจุดเริ่มของ Item นั้น
+    extra.forEach(r=>{ fillRow(r); r.start_day = jobStartDay; r.end_day = jobStartDay + (r.days || 0); r.start_iso = null; r.end_iso = null; });
+
+    const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
+    const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
+    return {
+      job, main, extra, qty,
+      startQty: main.length ? main[0].qty_in : (extra.length ? extra[0].qty_in : qty),
+      mainHours, extraHours,
+      totalHours: mainHours + extraHours,
+      mainDays: mainHours/hpd,
+      totalDays: (mainHours + extraHours)/hpd,
+      start_day: jobStartDay,
+      end_day: cum,
+      start_iso: main.length ? planAddWorkingDays(startIso, Math.floor(jobStartDay)) : null,
+      end_iso: main.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : null
+    };
+  });
+
+  const agg = (key)=> jobs.reduce((s,j)=> s + (j[key]||0), 0);
   // คอขวดคิดจากสายหลัก เพราะเป็นตัวกำหนดวันที่เสร็จ ขั้นตอนแยกไม่ได้ขวางสายการผลิต
   let bottleneck = null;
-  (main.length ? main : extra).forEach(r=>{ if(r.hours != null && (!bottleneck || r.hours > bottleneck.hours)) bottleneck = r; });
+  jobs.forEach(j=>{
+    (j.main.length ? j.main : j.extra).forEach(r=>{
+      if(r.hours != null && (!bottleneck || r.hours > bottleneck.row.hours)) bottleneck = {row:r, job:j.job};
+    });
+  });
 
   return {
-    rows, main, extra, startIso, qty, hpd,
-    startQty: main.length ? main[0].qty_in : (extra.length ? extra[0].qty_in : qty),
-    mainHours, extraHours, mainCost,
-    totalHours: mainHours + extraHours,
-    mainDays: mainHours/hpd,
-    totalDays: (mainHours + extraHours)/hpd,
-    totalCost: mainCost + extraCost,
-    finishIso: main.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : startIso,
-    missingRate: rows.filter(r=> r.rate == null).length,
+    jobs, startIso, hpd,
+    hasExtra: jobs.some(j=> j.extra.length > 0),
+    qty: agg('qty'),
+    startQty: agg('startQty'),
+    mainHours: agg('mainHours'),
+    extraHours: agg('extraHours'),
+    totalHours: agg('totalHours'),
+    mainDays: agg('mainHours')/hpd,
+    totalDays: agg('totalHours')/hpd,
+    finishIso: planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)),
+    missingRate: jobs.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
     bottleneck
   };
 }
-
-const PLAN_RANK_LABEL = {standard:'· 標準順序', standalone:'· 獨立站別'};
 
 const PLAN_RATE_SRC_LABEL = {
   rate_target_95: '取自目標 95%',
@@ -1775,40 +1851,38 @@ const PLAN_RATE_SRC_LABEL = {
   rate_actual: '取自實際速率',
   manual: '手動輸入'
 };
+const PLAN_RANK_LABEL = {standard:'· 標準順序', standalone:'· 獨立站別'};
 
 function renderPlanner(){
   const box = document.getElementById('planResult');
-  const countEl = document.getElementById('planStepCount');
+  const countEl = document.getElementById('planJobCount');
   if(!box) return;
+  countEl.textContent = String(planState.jobs.length);
 
-  if(!planState.item){
-    countEl.textContent = '0';
-    box.innerHTML = `<div class="panel plan-empty">請於上方選擇 Item 代碼以開始計算生產排程<br>系統會自動從歷史資料帶出該 Item 的站別、生產速率與單件成本</div>`;
-    return;
-  }
-  if(!planState.steps.length){
-    countEl.textContent = '0';
-    box.innerHTML = `<div class="panel plan-empty">此 Item 在歷史資料中尚無標示部門的紀錄，因此無法計算生產站別</div>`;
+  if(!planState.jobs.length){
+    box.innerHTML = `<div class="panel plan-empty">排程中尚無 Item — 請於上方選擇 Item 代碼、填入數量，再按「＋ 加入排程」<br>同一張製令可加入多筆 Item，並可調整上線順序</div>`;
     return;
   }
 
   const plan = computePlan();
-  countEl.textContent = String(plan.rows.length);
-  const split = plan.extra.length > 0;   // มีขั้นตอนแยกที่ไม่อยู่ในสายหลัก
+  const split = plan.hasExtra;
 
   const kpis = [
+    {label:'排程內 Item', value:fmtNum(plan.jobs.length), unit:'筆',
+     sub:'應交付共 %q 件'.replace('%q', fmtNum(plan.qty)), cls:''},
     {label:'起始投入量', value:fmtNum(plan.startQty), unit:'件',
      sub:'為取得良品 %s 件（不良預留 %p%）'.replace('%s', fmtNum(plan.qty)).replace('%p', fmtNum(planState.scrapPct,1)), cls:''},
     {label:'所需總工時', value:fmtNum(plan.totalHours,1), unit:'小時',
      sub: split ? '主線 %m 小時 + 獨立站別 %e 小時'.replace('%m', fmtNum(plan.mainHours,1)).replace('%e', fmtNum(plan.extraHours,1))
-                : '所有站別依序接續之合計', cls:''},
+                : '所有 Item 所有站別依序接續之合計', cls:''},
     {label:'所需工作天', value:fmtNum(plan.mainDays,1), unit:'天',
      sub:'以每日 %h 小時計'.replace('%h', fmtNum(plan.hpd,1)) + (split ? '．不含獨立站別' : ''), cls:''},
-    {label:'預計完成', value:planFmtDate(plan.finishIso), unit:'', textValue:true,
+    {label:'整張排程預計完成', value:planFmtDate(plan.finishIso), unit:'', textValue:true,
      sub:'開工 %d · 跳過週日'.replace('%d', planFmtDate(plan.startIso)) + (split ? '．不含獨立站別' : ''), cls:''},
-    {label:'工資概估', value:fmtNum(plan.totalCost,0), unit:'฿', sub:'數量 × 歷史單件成本', cls:''},
-    {label:'瓶頸站別', value: plan.bottleneck ? escapeHtml(translateDept(plan.bottleneck.step.dept)) : '—', unit:'', textValue:true,
-     sub: plan.bottleneck ? '耗時 %h 小時，為最久'.replace('%h', fmtNum(plan.bottleneck.hours,1)) : '—', cls:'bad'},
+    {label:'瓶頸站別',
+     value: plan.bottleneck ? escapeHtml(translateDept(plan.bottleneck.row.step.dept)) : '—', unit:'', textValue:true,
+     sub: plan.bottleneck ? '%i · 耗時 %h 小時，為最久'.replace('%h', fmtNum(plan.bottleneck.row.hours,1)).replace('%i', escapeHtml(plan.bottleneck.job.item)) : '—',
+     cls:'bad'},
   ];
 
   const kpiHtml = `<div class="kpi-grid">` + kpis.map(k=>`
@@ -1819,83 +1893,103 @@ function renderPlanner(){
     </div>`).join('') + `</div>`;
 
   // แถวของสายหลักเลื่อนลำดับได้ ส่วนขั้นตอนแยกไม่มีลำดับให้เลื่อน
-  const rowHtml = (r, no, lastNo)=>{
+  const rowHtml = (r, job, no, lastNo)=>{
     const c = getDeptColor(r.step.dept);
     const dept = escapeHtml(r.step.dept).replace(/"/g,'&quot;');
+    const material = translateMaterial(r.step.material || '');
     const srcLabel = r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src] || '') : '無資料';
     const seq = no
       ? `<span class="plan-seq-no">${no}</span>
-          <button class="plan-move" data-move="up" data-idx="${no-1}" title="上移" ${no===1?'disabled':''}>▲</button>
-          <button class="plan-move" data-move="down" data-idx="${no-1}" title="下移" ${no===lastNo?'disabled':''}>▼</button>`
+          <button class="plan-move" data-move="up" data-job="${job.uid}" data-idx="${no-1}" title="上移" ${no===1?'disabled':''}>▲</button>
+          <button class="plan-move" data-move="down" data-job="${job.uid}" data-idx="${no-1}" title="下移" ${no===lastNo?'disabled':''}>▼</button>`
       : `<span class="plan-seq-no">—</span>`;
     return `<tr>
       <td><div class="plan-seq">${seq}</div></td>
       <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">僅部分尺寸的球</div>' : ''}</td>
+      <td><div class="plan-material" title="${escapeHtml(material).replace(/"/g,'&quot;')}">${material ? escapeHtml(planShortMaterial(material)) : '—'}</div></td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
+        <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
       </td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-dept="${dept}" value="${r.stations}">
+        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-job="${job.uid}" data-dept="${dept}" value="${r.stations}">
       </td>
-      <td class="num mono">${fmtNum(r.qty_in)}</td>
+      <td class="num">
+        <input class="plan-cell-input${r.qty_manual ? ' manual' : ''}" type="number" min="0" step="1" data-field="qty" data-job="${job.uid}" data-dept="${dept}" value="${Math.round(r.qty_in)}">
+        ${r.qty_manual ? '<div class="plan-src manual">手動輸入</div>' : ''}
+      </td>
       <td class="num mono">${r.hours != null ? fmtNum(r.hours,2) : '—'}</td>
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
-      <td class="num mono">${r.cost != null ? fmtNum(r.cost,0) : '—'}</td>
       <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
     </tr>`;
   };
 
-  const mainBody = plan.main.map((r,i)=> rowHtml(r, i+1, plan.main.length)).join('');
-  const extraBody = split
-    ? `<tr class="plan-sep"><td colspan="10">獨立站別 — 不在主線順序中，故不排定日期，也不計入完成日</td></tr>` + plan.extra.map(r=> rowHtml(r, 0, 0)).join('')
-    : '';
-  const totalRows = (split ? `
+  const jobHtml = (jp, i)=>{
+    const job = jp.job;
+    const mainBody = jp.main.map((r,k)=> rowHtml(r, job, k+1, jp.main.length)).join('');
+    const extraBody = jp.extra.length
+      ? `<tr class="plan-sep"><td colspan="10">獨立站別 — 不在主線順序中，故不排定日期，也不計入完成日</td></tr>` + jp.extra.map(r=> rowHtml(r, job, 0, 0)).join('')
+      : '';
+    const totalRows = (jp.extra.length ? `
             <tr class="plan-tot">
-              <td colspan="5">主線合計</td>
-              <td class="num mono">${fmtNum(plan.mainHours,2)}</td>
-              <td class="num mono">${fmtNum(plan.mainDays,2)}</td>
-              <td class="mono">${planFmtDate(plan.startIso)} → ${planFmtDate(plan.finishIso)}</td>
-              <td class="num mono">${fmtNum(plan.mainCost,0)}</td>
+              <td colspan="6">主線合計</td>
+              <td class="num mono">${fmtNum(jp.mainHours,2)}</td>
+              <td class="num mono">${fmtNum(jp.mainDays,2)}</td>
+              <td class="mono">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : '—'}</td>
               <td></td>
             </tr>` : '') + `
             <tr class="plan-tot">
-              <td colspan="5">合計</td>
-              <td class="num mono">${fmtNum(plan.totalHours,2)}</td>
-              <td class="num mono">${fmtNum(plan.totalDays,2)}</td>
-              <td class="mono">${split ? '—' : planFmtDate(plan.startIso) + ' → ' + planFmtDate(plan.finishIso)}</td>
-              <td class="num mono">${fmtNum(plan.totalCost,0)}</td>
+              <td colspan="6">本 Item 合計</td>
+              <td class="num mono">${fmtNum(jp.totalHours,2)}</td>
+              <td class="num mono">${fmtNum(jp.totalDays,2)}</td>
+              <td class="mono">${jp.extra.length ? '—' : (jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : '—')}</td>
               <td></td>
             </tr>`;
-
-  const tableHtml = `
-    <div class="panel table-panel">
-      <h2>生產站別</h2>
-      <div class="panel-note">速率與並行機台數可直接於表格修改（按 Enter 或點擊他處即重新計算）— ▲▼ 僅調整主線站別的順序</div>
+    const noSteps = !jp.main.length && !jp.extra.length;
+    return `<div class="panel plan-job">
+      <div class="plan-job-head">
+        <div class="plan-job-id">
+          <span class="plan-job-no">#${i+1}</span>
+          <span class="plan-job-item">${escapeHtml(job.item)}</span>
+          <span class="plan-job-dates">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : ''}</span>
+        </div>
+        <div class="plan-job-tools">
+          <label class="plan-job-qty">數量（件）
+            <input class="plan-cell-input" type="number" min="1" step="1" data-jobfield="qty" data-job="${job.uid}" value="${job.qty}">
+          </label>
+          <button class="plan-move" data-jobmove="up" data-job="${job.uid}" title="Item 上移" ${i===0?'disabled':''}>▲</button>
+          <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="Item 下移" ${i===plan.jobs.length-1?'disabled':''}>▼</button>
+          <button class="plan-move plan-del" data-jobdel="${job.uid}" title="從排程移除此 Item">✕</button>
+        </div>
+      </div>
+      ${noSteps ? `<div class="plan-empty">此 Item 在歷史資料中尚無標示部門的紀錄，因此無法計算生產站別</div>` : `
       <div class="table-wrap">
-        <table id="planStepTable">
+        <table class="plan-step-table">
           <thead>
             <tr>
               <th>順序</th>
               <th>站別（部門）</th>
+              <th>原料名稱</th>
               <th class="num">速率（件/小時）</th>
               <th class="num">並行機台數</th>
               <th class="num">應投入（件）</th>
               <th class="num">工時</th>
               <th class="num">天數</th>
               <th>日期區間</th>
-              <th class="num">工資（฿）</th>
               <th class="num">參考（筆）</th>
             </tr>
           </thead>
           <tbody>${mainBody}${extraBody}${totalRows}
           </tbody>
         </table>
-      </div>
+      </div>`}
     </div>`;
+  };
 
-  const span = Math.max(plan.rows.reduce((m,r)=> Math.max(m, r.end_day||0), 0), 0.0001);
+  const jobsHtml = plan.jobs.map(jobHtml).join('');
+
+  const span = Math.max(plan.jobs.reduce((m,j)=> Math.max(m, j.end_day||0), 0), 0.0001);
   const tlRow = (r, standalone)=>{
     const c = getDeptColor(r.step.dept);
     const name = escapeHtml(translateDept(r.step.dept));
@@ -1912,66 +2006,50 @@ function renderPlanner(){
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>預估時程</h2>
-      <div class="panel-note">長條長度＝該站別所需天數，主線依順序接續排列（假設逐站進行、不重疊）</div>
+      <div class="panel-note">長條長度＝該站別所需天數，Item 之內與 Item 之間皆依排程順序接續排列（假設逐站進行、不重疊）</div>
       <div class="plan-timeline">
-        ${plan.main.map(r=> tlRow(r, false)).join('')}
-        ${split ? `<div class="plan-tl-sep">獨立站別 — 隨時可做、不接續於任何站別，故一律自起點繪製</div>` + plan.extra.map(r=> tlRow(r, true)).join('') : ''}
+        ${plan.jobs.map((jp,i)=> `<div class="plan-tl-job">#${i+1} ${escapeHtml(jp.job.item)}</div>`
+            + jp.main.map(r=> tlRow(r, false)).join('')
+            + (jp.extra.length ? `<div class="plan-tl-sep">獨立站別 — 隨時可做、不接續於任何站別，故自該 Item 的起點繪製</div>` + jp.extra.map(r=> tlRow(r, true)).join('') : '')
+          ).join('')}
       </div>
     </div>`;
 
-  const extraNote = split ? `<li><b>獨立站別</b> — 不在主線順序中的部門視為獨立站別，不接續於任何站別，故工時與工資另計、不良僅預留一層，且不計入主線的完成日</li>` : '';
+  const extraNote = split ? `<li><b>獨立站別</b> — 不在主線順序中的部門視為獨立站別，不接續於任何站別，故工時另計、不良僅預留一層，且不計入主線的完成日</li>` : '';
   const warnHtml = plan.missingRate ? `<li class="plan-warn">部分站別在歷史資料中沒有生產速率 — 請於表格中自行輸入，否則該站別不會計入工時與日期</li>` : '';
   const assumeHtml = `
     <div class="panel plan-assume">
       <h2>計算所用之假設</h2>
       <div class="panel-note">所有數字皆為依歷史資料所做的概估，並非已確認的生產計畫</div>
       <ul>
+        <li><b>Item 順序</b> — Item 依排程順序接續生產（前一筆完成後下一筆才開始），可用卡片標題上的 ▲▼ 調整順序</li>
         <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改用主線標準順序：壓延 → 沖壓 → 砂紙 → 裁膠 → 上膠 → 研磨 → 研磨(粗) → 研磨(細) → 鑽孔；其中研磨(粗)/(細) 僅部分尺寸的球需要 — 可用 ▲▼ 自行調整</li>
         ${extraNote}
         <li><b>生產速率</b> — 取歷史目標值的中位數（件/小時），或實際速率＝實際產量合計 ÷ 機台工時合計，依上方所選基準</li>
         <li><b>工時</b> — 工時＝數量 ÷（速率 × 機台數），僅計機台運轉時間，不含換模、待料與站間搬運</li>
         <li><b>日期</b> — 依所填每日工時換算，並依工廠行事曆跳過週日</li>
-        <li><b>不良</b> — 依所填百分比於每一站別同樣預留，並自最末站往前推算（故前段站別的投入量高於後段）</li>
+        <li><b>不良</b> — 依所填百分比於每一站別同樣預留，並自最末站往前推算；若在某一站別自行輸入「應投入」數量，則以該數量為準再往前推算</li>
+        <li><b>原料名稱</b> — 取自該 Item 在各站別的最新一筆紀錄（同一 Item 可能因訂單而使用不同原料），滑鼠停留可看完整名稱</li>
         ${warnHtml}
       </ul>
     </div>`;
 
-  box.innerHTML = kpiHtml + tableHtml + timelineHtml + assumeHtml;
+  box.innerHTML = kpiHtml + jobsHtml + timelineHtml + assumeHtml;
 }
 
-function planSelectItem(item){
-  if(item === planState.item) return;
-  planState.item = item;
-  planState.overrides = {};
-  planState.order = [];
-  planState.steps = item ? buildPlanSteps(item) : [];
-  renderPlanner();
-}
-
-function planSyncItemFromInput(){
-  const input = document.getElementById('planSearchItem');
-  const raw = (input.value || '').trim().toLowerCase();
-  const match = planItemOptions().find(i => i.toLowerCase() === raw);
-  planSelectItem(match || '');
-}
-
-function planItemOptions(){
-  return [...new Set(RAW.filter(r=> r.item_code && r.dept).map(r=>r.item_code))].sort();
-}
-
-/** เรียกเมื่อข้อมูลถูกโหลดใหม่ — ลำดับที่ผู้ใช้จัดเองและค่าที่พิมพ์ทับยังคงอยู่ */
+/** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
 function refreshPlanner(){
-  if(planState.item){
-    const stillExists = planItemOptions().includes(planState.item);
-    planState.steps = stillExists ? buildPlanSteps(planState.item) : [];
-    if(!stillExists) planState.item = '';
-  }
+  const options = planItemOptions();
+  planState.jobs = planState.jobs.filter(j=> options.includes(j.item));
+  planState.jobs.forEach(j=>{ j.steps = buildPlanSteps(j.item, j.order); });
+  const list = document.getElementById('planCustomerList');
+  if(list) list.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
   renderPlanner();
 }
 
 setupSearchableSelect({
   inputId:'planSearchItem', panelId:'ssPlanItemPanel', clearId:'ssPlanItemClear', stateKey:'itemQuery',
-  stateObj: planState, onChange: planSyncItemFromInput,
+  stateObj: planState, onChange: ()=>{},
   getOptions: planItemOptions
 });
 
@@ -1987,10 +2065,11 @@ setupSearchableSelect({
       renderPlanner();
     });
   };
-  num('planQty', 'qty', 0, 1e9);
   num('planHoursPerDay', 'hoursPerDay', 0.5, 24);
   num('planScrap', 'scrapPct', 0, 90);
 
+  document.getElementById('planCustomer').addEventListener('input', (e)=>{ planState.customer = e.target.value; });
+  document.getElementById('planPO').addEventListener('input', (e)=>{ planState.po = e.target.value; });
   start.addEventListener('change', (e)=>{
     planState.startIso = e.target.value || planTodayIso();
     renderPlanner();
@@ -2000,29 +2079,71 @@ setupSearchableSelect({
     renderPlanner();
   });
 
-  // ปุ่มเลื่อนลำดับขั้นตอน + ช่องแก้อัตรา/จำนวนสถานี (ผูกแบบ delegate เพราะตารางถูกวาดใหม่ทุกครั้ง)
+  // เพิ่ม Item เข้าแผน — รับเฉพาะรหัสที่มีอยู่จริงในข้อมูล
+  const itemInput = document.getElementById('planSearchItem');
+  const qtyInput = document.getElementById('planQty');
+  function addFromBar(){
+    const raw = (itemInput.value || '').trim().toLowerCase();
+    const match = planItemOptions().find(i => i.toLowerCase() === raw);
+    if(!match){ itemInput.focus(); return; }
+    planAddJob(match, parseFloat(qtyInput.value) || 1);
+    itemInput.value = '';
+    planState.itemQuery = '';
+    document.getElementById('ssPlanItemClear').classList.remove('show');
+  }
+  document.getElementById('planAddBtn').addEventListener('click', addFromBar);
+  itemInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') addFromBar(); });
+
+  // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
   const box = document.getElementById('planResult');
   box.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.plan-move');
+    const del = e.target.closest('[data-jobdel]');
+    if(del){
+      const uid = parseInt(del.getAttribute('data-jobdel'), 10);
+      planState.jobs = planState.jobs.filter(j=> j.uid !== uid);
+      renderPlanner();
+      return;
+    }
+    const jobMove = e.target.closest('[data-jobmove]');
+    if(jobMove){
+      const uid = parseInt(jobMove.getAttribute('data-job'), 10);
+      const i = planState.jobs.findIndex(j=> j.uid === uid);
+      const j2 = jobMove.getAttribute('data-jobmove') === 'up' ? i-1 : i+1;
+      if(i === -1 || j2 < 0 || j2 >= planState.jobs.length) return;
+      const list = planState.jobs;
+      [list[i], list[j2]] = [list[j2], list[i]];
+      renderPlanner();
+      return;
+    }
+    const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
+    const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
+    if(!job) return;
     const i = parseInt(btn.getAttribute('data-idx'), 10);
-    const j = btn.getAttribute('data-move') === 'up' ? i-1 : i+1;
-    const mainLen = planState.steps.filter(x=> x.rank != null).length;
-    if(j < 0 || j >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
-    const s = planState.steps;
-    [s[i], s[j]] = [s[j], s[i]];
-    planState.order = s.map(x=>x.dept);
+    const j2 = btn.getAttribute('data-move') === 'up' ? i-1 : i+1;
+    const mainLen = job.steps.filter(x=> x.rank != null).length;
+    if(j2 < 0 || j2 >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
+    const s = job.steps;
+    [s[i], s[j2]] = [s[j2], s[i]];
+    job.order = s.map(x=> x.dept);
     renderPlanner();
   });
   // ใช้ change ไม่ใช่ input — ตารางถูกวาดใหม่ทุกครั้งที่ค่าเปลี่ยน ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
   box.addEventListener('change', (e)=>{
     const inp = e.target.closest('.plan-cell-input');
     if(!inp) return;
+    const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
+    if(!job) return;
+    const v = parseFloat(inp.value);
+    if(inp.hasAttribute('data-jobfield')){
+      job.qty = (isNaN(v) || v <= 0) ? 1 : v;
+      renderPlanner();
+      return;
+    }
     const dept = inp.getAttribute('data-dept');
     const field = inp.getAttribute('data-field');
-    const v = parseFloat(inp.value);
-    if(!planState.overrides[dept]) planState.overrides[dept] = {};
-    planState.overrides[dept][field] = (isNaN(v) || v <= 0) ? null : v;
+    if(!job.overrides[dept]) job.overrides[dept] = {};
+    job.overrides[dept][field] = (isNaN(v) || v <= 0) ? null : v;
     renderPlanner();
   });
 })();
