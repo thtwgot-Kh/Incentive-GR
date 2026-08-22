@@ -754,6 +754,7 @@
       <div class="plan-actions">
         <button class="connect-btn ghost" id="planAddBtn">+ Item ထည့်ရန်</button>
         <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ ထုတ်လုပ်ချိန် တွက်ရန်</button>
+        <button class="connect-btn ghost" id="planExportBtn">📊 Excel ထုတ်ရန်</button>
       </div>
     </div>
 
@@ -1904,6 +1905,198 @@ const PLAN_RATE_SRC_LABEL = {
 };
 const PLAN_RANK_LABEL = {standard:'· စံအစဉ်', standalone:'· သီးသန့်အဆင့်'};
 
+// ---------- Production planner: Export to Excel (.xlsx) ----------
+// ပြင်ပ library မသုံးဘဲ .xlsx ဖိုင်ကို ZIP ကို ကိုယ်တိုင်တည်ဆောက်ခြင်း (compression မလုပ်ဘဲ store)
+// ဒီစာမျက်နှာက HTML ဖိုင်တစ်ခုတည်းဖြစ်၍ ပြင်ပ script မသုံးပါ
+
+function planCrc32(bytes){
+  let crc = ~0;
+  for(let i=0;i<bytes.length;i++){
+    crc ^= bytes[i];
+    for(let j=0;j<8;j++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1));
+  }
+  return (~crc) >>> 0;
+}
+function planMakeZip(files){
+  const encoder = new TextEncoder();
+  const parts = [], centralParts = [];
+  let offset = 0;
+  files.forEach(f=>{
+    const nameBytes = encoder.encode(f.name);
+    const data = f.data;
+    const crc = planCrc32(data);
+    const size = data.length;
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0x21, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    parts.push(local, data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0x21, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  });
+
+  const centralSize = centralParts.reduce((s,p)=>s+p.length,0);
+  const centralOffset = offset;
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, centralOffset, true);
+
+  return new Blob([...parts, ...centralParts, end], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function planColLetter(n){
+  let s = '';
+  n++;
+  while(n > 0){
+    const r = (n-1) % 26;
+    s = String.fromCharCode(65+r) + s;
+    n = Math.floor((n-1)/26);
+  }
+  return s;
+}
+function planXmlEscape(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+}
+function planSheetXml(rows){
+  let body = '';
+  rows.forEach((row,ri)=>{
+    let cells = '';
+    row.forEach((val,ci)=>{
+      if(val === null || val === undefined || val === '') return;
+      const ref = planColLetter(ci) + (ri+1);
+      if(typeof val === 'number' && isFinite(val)){
+        cells += `<c r="${ref}"><v>${val}</v></c>`;
+      } else {
+        cells += `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${planXmlEscape(val)}</t></is></c>`;
+      }
+    });
+    body += `<row r="${ri+1}">${cells}</row>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+}
+/** sheets: [{name, rows: [[cell,...],...]}] → .xlsx ဖိုင်၏ Blob */
+function planBuildXlsx(sheets){
+  const encoder = new TextEncoder();
+  const files = [];
+  files.push({name:'[Content_Types].xml', data: encoder.encode(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>`
+  )});
+  files.push({name:'_rels/.rels', data: encoder.encode(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`
+  )});
+  files.push({name:'xl/workbook.xml', data: encoder.encode(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s,i)=>`<sheet name="${planXmlEscape(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`
+  )});
+  files.push({name:'xl/_rels/workbook.xml.rels', data: encoder.encode(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}</Relationships>`
+  )});
+  sheets.forEach((s,i)=>{
+    files.push({name:`xl/worksheets/sheet${i+1}.xml`, data: encoder.encode(planSheetXml(s.rows))});
+  });
+  return planMakeZip(files);
+}
+function planRound2(n){ return Math.round(n*100)/100; }
+function planDownloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+}
+
+/** ခလုတ် "Excel ထုတ်ရန်" — လက်ရှိ ထုတ်လုပ်မှုအစီအစဉ် ရလဒ်ကို .xlsx ဖိုင်အဖြစ် ထုတ်ပေးသည် */
+function planExportExcel(){
+  if(!planState.computed || !planValidJobs().length){
+    alert('ကျေးဇူးပြု၍ “ထုတ်လုပ်ချိန် တွက်ရန်” ကို အရင်နှိပ်ပါ၊ ပြီးမှ Excel ထုတ်ပါ');
+    return;
+  }
+  const plan = computePlan();
+  const rateBasisLabel = {target_95:'ပန်းတိုင် 95%', target_100:'ပန်းတိုင် 100%', actual:'အတိတ်က အမှန်နှုန်း ပျမ်းမျှ'}[planState.rateBasis] || planState.rateBasis;
+
+  const summaryRows = [
+    ['ထုတ်လုပ်မှုအစီအစဉ် အနှစ်ချုပ်'],
+    [],
+    ['ဖောက်သည်', planState.customer || '—'],
+    ['ထုတ်လုပ်မှုအမှတ်စဉ်', planState.po || '—'],
+    ['စတင်ထုတ်လုပ်မည့်ရက်', planFmtDate(plan.startIso)],
+    ['နာရီ/ရက်', plan.hpd],
+    ['အပျက် ခွင့်ပြု (%)', planState.scrapPct],
+    ['သုံးမည့် ထုတ်လုပ်နှုန်း', rateBasisLabel],
+    [],
+    ['အစီအစဉ်ထဲ Item (ခု)', plan.jobs.length],
+    ['စုစုပေါင်း ပေးပို့ရမည် (ခု)', plan.qty],
+    ['စတင်ထည့်ရမည့် အရေအတွက် (ခု)', Math.round(plan.startQty)],
+    ['စုစုပေါင်း အချိန် (နာရီ)', planRound2(plan.totalHours)],
+    ['  - ပင်မလိုင်း (နာရီ)', planRound2(plan.mainHours)],
+    ['  - သီးသန့်အဆင့် (နာရီ)', planRound2(plan.extraHours)],
+    ['အလုပ်လုပ်ရက် (ပင်မလိုင်း)', planRound2(plan.mainDays)],
+    ['အစီအစဉ်တစ်ခုလုံး ပြီးစီးမည့်ရက်', planFmtDate(plan.finishIso)],
+    ['အကြပ်အတည်း အဆင့်', plan.bottleneck ? (translateDept(plan.bottleneck.row.step.dept) + ' (' + plan.bottleneck.job.item + ')') : '—'],
+    ['နှုန်းမရှိသေးသော အဆင့် (ခု)', plan.missingRate]
+  ];
+
+  const detailHeader = ['Item အစဉ်','Item ကုဒ်','Item အရေအတွက် (ခု)','အဆင့်အမျိုးအစား','ခြေလှမ်းအစဉ်','အဆင့် (ဌာန)','ကုန်ကြမ်းအမည်','နှုန်း (ခု/နာရီ)','နှုန်းရင်းမြစ်','ပြိုင်တူလုပ်သည့် စက်အလုံး','လုပ်ရမည် (ခု)','နာရီ','ရက်','စတင်','ပြီးစီး','ကိုးကား (မှတ်တမ်း)'];
+  const detailRows = [detailHeader];
+  plan.jobs.forEach((jp,i)=>{
+    const pushRow = (r, no, kind)=>{
+      detailRows.push([
+        i+1, jp.job.item, jp.qty, kind, no || '', translateDept(r.step.dept),
+        translateMaterial(r.step.material || ''), r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'အချက်အလက်မရှိ',
+        r.stations, Math.round(r.qty_in), r.hours != null ? planRound2(r.hours) : '', r.days != null ? planRound2(r.days) : '',
+        r.start_iso ? planFmtDate(r.start_iso) : '', r.end_iso ? planFmtDate(r.end_iso) : '', r.step.n
+      ]);
+    };
+    jp.main.forEach((r,k)=> pushRow(r, k+1, 'ပင်မလိုင်း'));
+    jp.extra.forEach(r=> pushRow(r, '', 'သီးသန့်အဆင့်'));
+  });
+
+  const blob = planBuildXlsx([
+    {name:'အနှစ်ချုပ်', rows: summaryRows},
+    {name:'အဆင့်အသေးစိတ်', rows: detailRows}
+  ]);
+  const safe = (planState.po || planState.customer || 'plan').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'plan';
+  planDownloadBlob(blob, `ProductionPlan_${safe}_${planTodayIso()}.xlsx`);
+}
+
 function renderPlanner(){
   const box = document.getElementById('planResult');
   const countEl = document.getElementById('planJobCount');
@@ -2127,6 +2320,7 @@ function refreshPlanner(){
 
   document.getElementById('planAddBtn').addEventListener('click', planAddRow);
   document.getElementById('planCalcBtn').addEventListener('click', planCompute);
+  document.getElementById('planExportBtn').addEventListener('click', planExportExcel);
 
   // กล่องรายการ Item — แก้รหัส/จำนวน จัดลำดับ และลบแถว
   const rowBox = document.getElementById('planItemRows');
