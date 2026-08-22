@@ -561,6 +561,25 @@
     background:var(--bg-2);color:var(--text-dim);font-size:11.5px;letter-spacing:.02em;
     border-top:1px solid var(--border);
   }
+  /* แถวกรอกรายการ Item */
+  .plan-items-panel{margin-bottom:20px;}
+  .plan-rows{display:flex;flex-direction:column;gap:8px;}
+  .plan-row{display:grid;grid-template-columns:34px 1fr 150px auto;gap:10px;align-items:center;}
+  .plan-row.head{padding-bottom:2px;}
+  .plan-row.head span{
+    font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);
+  }
+  .plan-row-no{font-family:var(--mono);font-size:12px;color:var(--text-faint);}
+  .plan-row-item.invalid{border-color:var(--bad);}
+  .plan-row-tools{display:flex;align-items:center;gap:6px;}
+  .plan-row-hint{grid-column:2 / -1;font-size:11px;color:var(--bad);margin-top:-4px;}
+  .plan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  .plan-calc-btn{font-weight:600;}
+  .plan-stale{
+    background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);
+    border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:16px;
+  }
+
   /* Item card */
   .plan-job{margin-bottom:16px;}
   .plan-job-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
@@ -690,7 +709,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION PLANNER</div>
         <h1>ထုတ်လုပ်မှုအစီအစဉ် တွက်ချက်ခြင်း</h1>
-        <div class="subtitle">ဖောက်သည်အမည်နှင့် ထုတ်လုပ်မှုအမှတ်စဉ် ထည့်ပြီး ထုတ်လုပ်ရမည့် Item များကို တစ်ခုချင်း ထည့်ပါ — မှတ်တမ်းရှိ အမှန်တကယ်နှုန်းဖြင့် အဆင့်တစ်ခုချင်း အချိန်နှင့် ရက်စွဲကို တွက်ပေးသည်။ နှုန်း၊ စက်အလုံးရေ၊ လုပ်ရမည့်အရေအတွက်၊ အဆင့်အစဉ်နှင့် Item အစဉ်ကို ကိုယ်တိုင်ပြင်နိုင်သည်</div>
+        <div class="subtitle">ဖောက်သည်အမည်နှင့် ထုတ်လုပ်မှုအမှတ်စဉ် ထည့်ပြီး ထုတ်လုပ်ရမည့် Item များကို တစ်ခုချင်း ဖြည့်ပြီး “ထုတ်လုပ်ချိန် တွက်ရန်” ကို နှိပ်ပါ — မှတ်တမ်းရှိ အမှန်တကယ်နှုန်းဖြင့် အဆင့်တစ်ခုချင်း အချိန်နှင့် ရက်စွဲကို တွက်ပေးသည်။ နှုန်း၊ စက်အလုံးရေ၊ လုပ်ရမည့်အရေအတွက်၊ အဆင့်အစဉ်နှင့် Item အစဉ်ကို ကိုယ်တိုင်ပြင်နိုင်သည်</div>
       </div>
       <div class="meta-chip">အစီအစဉ်ထဲ Item <b id="planJobCount">0</b> ခု</div>
     </header>
@@ -727,22 +746,14 @@
       </div>
     </div>
 
-    <div class="prod-search-bar plan-add-bar">
-      <div class="filter-group ss-group" style="flex:1.6;min-width:220px;">
-        <span class="filter-label">Item ကုဒ်</span>
-        <div class="ss-control" id="ssPlanItemControl">
-          <input type="text" id="planSearchItem" class="search-box" placeholder="ရှာဖွေ / Item ကုဒ် ရွေးပါ..." autocomplete="off">
-          <button class="ss-clear" id="ssPlanItemClear" title="ရှင်းလင်းရန်" type="button">✕</button>
-        </div>
-        <div class="filter-panel ss-panel" id="ssPlanItemPanel"></div>
-      </div>
-      <div class="filter-group">
-        <span class="filter-label">ထုတ်လုပ်ရမည့် အရေအတွက် (ခု)</span>
-        <input type="number" id="planQty" class="search-box plan-num" min="1" step="1" value="1000">
-      </div>
-      <div class="filter-group">
-        <span class="filter-label">&nbsp;</span>
-        <button class="connect-btn plan-add-btn" id="planAddBtn">+ အစီအစဉ်ထဲ ထည့်ရန်</button>
+    <div class="panel plan-items-panel">
+      <h2>ထုတ်လုပ်ရမည့် Item စာရင်း</h2>
+      <div class="panel-note">Item ကုဒ်နှင့် အရေအတွက် ဖြည့်ပါ — နောက်ထပ်တစ်ကွက် ထည့်ရန် “+ Item ထည့်ရန်” ကို နှိပ်ပါ၊ ▲▼ ဖြင့် အစဉ်စီပြီး “ထုတ်လုပ်ချိန် တွက်ရန်” ကို နှိပ်ပါ</div>
+      <div class="plan-rows" id="planItemRows"></div>
+      <datalist id="planItemList"></datalist>
+      <div class="plan-actions">
+        <button class="connect-btn ghost" id="planAddBtn">+ Item ထည့်ရန်</button>
+        <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ ထုတ်လုပ်ချိန် တွက်ရန်</button>
       </div>
     </div>
 
@@ -1619,7 +1630,9 @@ const planState = {
   startIso: '',
   scrapPct: 0,
   rateBasis: 'target_95',
-  jobs: []   // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
+  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
+  computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
+  dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
 };
 let planJobUid = 0;
 
@@ -1717,18 +1730,54 @@ function buildPlanSteps(item, userOrder){
 
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
 
-function planAddJob(item, qty){
-  if(!item) return false;
-  planState.jobs.push({
-    uid: ++planJobUid,
-    item: item,
-    qty: qty > 0 ? qty : 1,
-    steps: buildPlanSteps(item, []),
-    order: [],
-    overrides: {}
-  });
+function planNewJob(){
+  return {uid: ++planJobUid, item:'', qty: 1000, steps: [], order: [], overrides: {}};
+}
+/** เฉพาะแถวที่กรอกรหัสถูกต้องและมีขั้นตอนให้คำนวณ */
+function planValidJobs(){ return planState.jobs.filter(j=> j.item && j.steps.length); }
+
+/** ปุ่ม "เพิ่ม Item" — เพิ่มกล่องกรอกอีกหนึ่งแถว */
+function planAddRow(){
+  planState.jobs.push(planNewJob());
+  if(planState.computed) planState.dirty = true;
+  renderPlanRows();
   renderPlanner();
-  return true;
+}
+
+/** ปุ่ม "คำนวณเวลาในการผลิต" — อ่านทุกแถวแล้วสร้างผลลัพธ์ */
+function planCompute(){
+  const options = planItemOptions();
+  planState.jobs.forEach(j=>{
+    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+  });
+  planState.computed = planValidJobs().length > 0;
+  planState.dirty = false;
+  renderPlanRows();
+  renderPlanner();
+}
+
+/** กล่องกรอกรายการ Item — แถวละหนึ่ง Item พร้อมจำนวนและปุ่มจัดลำดับ */
+function renderPlanRows(){
+  const box = document.getElementById('planItemRows');
+  if(!box) return;
+  if(!planState.jobs.length) planState.jobs.push(planNewJob());
+  const options = planItemOptions();
+  box.innerHTML = `<div class="plan-row head"><span></span><span>Item ကုဒ်</span><span>အရေအတွက် (ခု)</span><span></span></div>`
+    + planState.jobs.map((job,i)=>{
+    const bad = job.item && !options.includes(job.item);
+    return `<div class="plan-row">
+      <div class="plan-row-no">#${i+1}</div>
+      <input class="search-box plan-row-item${bad ? ' invalid' : ''}" list="planItemList" data-job="${job.uid}" data-rowfield="item"
+             value="${escapeHtml(job.item).replace(/"/g,'&quot;')}" placeholder="ရှာဖွေ / Item ကုဒ် ရွေးပါ..." autocomplete="off">
+      <input class="search-box plan-num" type="number" min="1" step="1" data-job="${job.uid}" data-rowfield="qty" value="${job.qty}">
+      <div class="plan-row-tools">
+        <button class="plan-move" data-jobmove="up" data-job="${job.uid}" title="Item ကို အပေါ်တင်ရန်" ${i===0?'disabled':''}>▲</button>
+        <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="Item ကို အောက်ချရန်" ${i===planState.jobs.length-1?'disabled':''}>▼</button>
+        <button class="plan-move plan-del" data-jobdel="${job.uid}" title="Item ကို စာရင်းမှ ဖယ်ရန်" ${planState.jobs.length===1?'disabled':''}>✕</button>
+      </div>
+      ${bad ? `<div class="plan-row-hint">ဤကုဒ်ကို မှတ်တမ်းတွင် မတွေ့ပါ — ပေါ်လာသော စာရင်းမှ ရွေးပါ</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 /** อัตราการผลิตที่จะใช้คำนวณของขั้นตอนหนึ่ง (ชิ้น/ชม.) ตามฐานที่เลือก */
@@ -1760,7 +1809,7 @@ function computePlan(){
   const startIso = planState.startIso || planTodayIso();
 
   let cum = 0;
-  const jobs = planState.jobs.map(job=>{
+  const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
     const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
     const extra = job.steps.filter(s=> s.rank == null).map(s=>({step:s}));
@@ -1859,13 +1908,16 @@ function renderPlanner(){
   const box = document.getElementById('planResult');
   const countEl = document.getElementById('planJobCount');
   if(!box) return;
-  countEl.textContent = String(planState.jobs.length);
+  // นับเฉพาะแถวที่รหัสถูกต้อง แถวที่พิมพ์ผิดยังไม่ถือว่าอยู่ในแผน
+  const validCodes = planItemOptions();
+  countEl.textContent = String(planState.jobs.filter(j=> j.item && validCodes.includes(j.item)).length);
 
-  if(!planState.jobs.length){
-    box.innerHTML = `<div class="panel plan-empty">အစီအစဉ်ထဲတွင် Item မရှိသေးပါ — အပေါ်တွင် Item ကုဒ်ရွေး၊ အရေအတွက်ထည့်ပြီး “+ အစီအစဉ်ထဲ ထည့်ရန်” ကို နှိပ်ပါ<br>ထုတ်လုပ်မှုအမှတ်စဉ် တစ်ခုတည်းတွင် Item အများအပြား ထည့်နိုင်ပြီး အစဉ်ကိုလည်း ပြောင်းနိုင်သည်</div>`;
+  if(!planState.computed || !planValidJobs().length){
+    box.innerHTML = `<div class="panel plan-empty">အပေါ်ကွက်တွင် Item ကုဒ်နှင့် အရေအတွက် ဖြည့်ပြီး “ထုတ်လုပ်ချိန် တွက်ရန်” ကို နှိပ်ပါ<br>ထုတ်လုပ်မှုအမှတ်စဉ် တစ်ခုတည်းတွင် Item အများအပြား ထည့်နိုင်ပြီး အစဉ်ကိုလည်း ပြောင်းနိုင်သည်</div>`;
     return;
   }
 
+  const staleHtml = planState.dirty ? `<div class="plan-stale">နောက်ဆုံးတွက်ပြီးနောက် Item စာရင်းကို ပြင်ထားသည် — ရလဒ်ကို အသစ်ရရန် “ထုတ်လုပ်ချိန် တွက်ရန်” ကို ထပ်နှိပ်ပါ</div>` : '';
   const plan = computePlan();
   const split = plan.hasExtra;
 
@@ -1956,14 +2008,7 @@ function renderPlanner(){
           <span class="plan-job-item">${escapeHtml(job.item)}</span>
           <span class="plan-job-dates">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : ''}</span>
         </div>
-        <div class="plan-job-tools">
-          <label class="plan-job-qty">အရေအတွက် (ခု)
-            <input class="plan-cell-input" type="number" min="1" step="1" data-jobfield="qty" data-job="${job.uid}" value="${job.qty}">
-          </label>
-          <button class="plan-move" data-jobmove="up" data-job="${job.uid}" title="Item ကို အပေါ်တင်ရန်" ${i===0?'disabled':''}>▲</button>
-          <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="Item ကို အောက်ချရန်" ${i===plan.jobs.length-1?'disabled':''}>▼</button>
-          <button class="plan-move plan-del" data-jobdel="${job.uid}" title="Item ကို အစီအစဉ်မှ ဖယ်ရန်">✕</button>
-        </div>
+        <div class="plan-job-qty">အရေအတွက် <b>${fmtNum(jp.qty)}</b></div>
       </div>
       ${noSteps ? `<div class="plan-empty">ဤ Item အတွက် ဌာနဖော်ပြထားသော မှတ်တမ်းစာကြောင်း မရှိသေးသဖြင့် ထုတ်လုပ်မှုအဆင့်များကို တွက်ချက်၍ မရပါ</div>` : `
       <div class="table-wrap">
@@ -2024,7 +2069,7 @@ function renderPlanner(){
       <h2>တွက်ချက်ရာတွင် သုံးသော ယူဆချက်များ</h2>
       <div class="panel-note">ကိန်းဂဏန်းအားလုံးမှာ မှတ်တမ်းမှ ခန့်မှန်းချက်ဖြစ်ပြီး အတည်ပြုပြီး ထုတ်လုပ်မှုအစီအစဉ် မဟုတ်ပါ</div>
       <ul>
-        <li><b>Item အစဉ်</b> — Item များကို အစီအစဉ်အတိုင်း ဆက်တိုက် ထုတ်လုပ်သည် (ရှေ့ Item ပြီးမှ နောက် Item စသည်)။ ကတ်ခေါင်းရှိ ▲▼ ဖြင့် အစဉ်ပြောင်းနိုင်သည်</li>
+        <li><b>Item အစဉ်</b> — Item များကို အစီအစဉ်အတိုင်း ဆက်တိုက် ထုတ်လုပ်သည် (ရှေ့ Item ပြီးမှ နောက် Item စသည်)။ အပေါ်ရှိ Item စာရင်းကွက်၏ ▲▼ ဖြင့် အစဉ်ပြောင်းပြီး ထပ်တွက်ပါ</li>
         <li><b>အဆင့်အစဉ်</b> — Sheet တွင် အဆင့်အစဉ် (step order) ကော်လံ မရှိသဖြင့် ပင်မလိုင်း၏ စံအစဉ်ကို သုံးသည်: နယ်ခြင်း → ဖိနှိပ်ခြင်း → သဲစက္ကူ → ရာဘာဖြတ်ခြင်း → ကော်သုတ်ခြင်း → တိုက်ချွတ်ခြင်း → တိုက်ချွတ်ခြင်း(ရိုင်း) → တိုက်ချွတ်ခြင်း(သေချာ) → အပေါက်ဖောက်ခြင်း။ တိုက်ချွတ်ခြင်း(ရိုင်း)/(သေချာ) မှာ ဘောလုံး အချို့ဆိုက်သာ ဖြစ်သည် — ▲▼ ဖြင့် ပြင်နိုင်သည်</li>
         ${extraNote}
         <li><b>ထုတ်လုပ်နှုန်း</b> — မှတ်တမ်းရှိ ပန်းတိုင်၏ အလယ်တန်ဖိုး (ခု/နာရီ) သို့မဟုတ် အမှန်နှုန်း = စုစုပေါင်းထုတ်လုပ်မှု ÷ စုစုပေါင်းစက်ချိန် (အပေါ်တွင် ရွေးထားသည့်အတိုင်း)</li>
@@ -2036,24 +2081,23 @@ function renderPlanner(){
       </ul>
     </div>`;
 
-  box.innerHTML = kpiHtml + jobsHtml + timelineHtml + assumeHtml;
+  box.innerHTML = staleHtml + kpiHtml + jobsHtml + timelineHtml + assumeHtml;
 }
 
 /** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
 function refreshPlanner(){
   const options = planItemOptions();
-  planState.jobs = planState.jobs.filter(j=> options.includes(j.item));
-  planState.jobs.forEach(j=>{ j.steps = buildPlanSteps(j.item, j.order); });
-  const list = document.getElementById('planCustomerList');
-  if(list) list.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
+  planState.jobs.forEach(j=>{
+    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+  });
+  if(planState.computed && !planValidJobs().length) planState.computed = false;
+  const itemList = document.getElementById('planItemList');
+  if(itemList) itemList.innerHTML = options.map(i=>`<option value="${escapeHtml(i).replace(/"/g,'&quot;')}"></option>`).join('');
+  const custList = document.getElementById('planCustomerList');
+  if(custList) custList.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
+  renderPlanRows();
   renderPlanner();
 }
-
-setupSearchableSelect({
-  inputId:'planSearchItem', panelId:'ssPlanItemPanel', clearId:'ssPlanItemClear', stateKey:'itemQuery',
-  stateObj: planState, onChange: ()=>{},
-  getOptions: planItemOptions
-});
 
 (function initPlannerControls(){
   const start = document.getElementById('planStartDate');
@@ -2081,42 +2125,60 @@ setupSearchableSelect({
     renderPlanner();
   });
 
-  // เพิ่ม Item เข้าแผน — รับเฉพาะรหัสที่มีอยู่จริงในข้อมูล
-  const itemInput = document.getElementById('planSearchItem');
-  const qtyInput = document.getElementById('planQty');
-  function addFromBar(){
-    const raw = (itemInput.value || '').trim().toLowerCase();
-    const match = planItemOptions().find(i => i.toLowerCase() === raw);
-    if(!match){ itemInput.focus(); return; }
-    planAddJob(match, parseFloat(qtyInput.value) || 1);
-    itemInput.value = '';
-    planState.itemQuery = '';
-    document.getElementById('ssPlanItemClear').classList.remove('show');
-  }
-  document.getElementById('planAddBtn').addEventListener('click', addFromBar);
-  itemInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') addFromBar(); });
+  document.getElementById('planAddBtn').addEventListener('click', planAddRow);
+  document.getElementById('planCalcBtn').addEventListener('click', planCompute);
 
-  // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
-  const box = document.getElementById('planResult');
-  box.addEventListener('click', (e)=>{
+  // กล่องรายการ Item — แก้รหัส/จำนวน จัดลำดับ และลบแถว
+  const rowBox = document.getElementById('planItemRows');
+  rowBox.addEventListener('click', (e)=>{
     const del = e.target.closest('[data-jobdel]');
     if(del){
       const uid = parseInt(del.getAttribute('data-jobdel'), 10);
       planState.jobs = planState.jobs.filter(j=> j.uid !== uid);
+      if(!planState.jobs.length) planState.jobs.push(planNewJob());
+      if(planState.computed) planState.dirty = true;
+      renderPlanRows();
       renderPlanner();
       return;
     }
-    const jobMove = e.target.closest('[data-jobmove]');
-    if(jobMove){
-      const uid = parseInt(jobMove.getAttribute('data-job'), 10);
-      const i = planState.jobs.findIndex(j=> j.uid === uid);
-      const j2 = jobMove.getAttribute('data-jobmove') === 'up' ? i-1 : i+1;
-      if(i === -1 || j2 < 0 || j2 >= planState.jobs.length) return;
-      const list = planState.jobs;
-      [list[i], list[j2]] = [list[j2], list[i]];
-      renderPlanner();
-      return;
+    const move = e.target.closest('[data-jobmove]');
+    if(!move) return;
+    const uid = parseInt(move.getAttribute('data-job'), 10);
+    const i = planState.jobs.findIndex(j=> j.uid === uid);
+    const k = move.getAttribute('data-jobmove') === 'up' ? i-1 : i+1;
+    if(i === -1 || k < 0 || k >= planState.jobs.length) return;
+    const list = planState.jobs;
+    [list[i], list[k]] = [list[k], list[i]];
+    if(planState.computed) planState.dirty = true;
+    renderPlanRows();
+    renderPlanner();
+  });
+  // ใช้ change ไม่ใช่ input — แถวถูกวาดใหม่หลังแก้ค่า ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
+  rowBox.addEventListener('change', (e)=>{
+    const inp = e.target.closest('[data-rowfield]');
+    if(!inp) return;
+    const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
+    if(!job) return;
+    if(inp.getAttribute('data-rowfield') === 'item'){
+      const raw = (inp.value || '').trim();
+      const match = planItemOptions().find(i => i.toLowerCase() === raw.toLowerCase());
+      job.item = match || raw;
+      // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับไว้ของเดิมจึงใช้ไม่ได้
+      job.steps = match ? buildPlanSteps(match, []) : [];
+      job.order = [];
+      job.overrides = {};
+    }else{
+      const v = parseFloat(inp.value);
+      job.qty = (isNaN(v) || v <= 0) ? 1 : v;
     }
+    if(planState.computed) planState.dirty = true;
+    renderPlanRows();
+    renderPlanner();
+  });
+
+  // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
+  const box = document.getElementById('planResult');
+  box.addEventListener('click', (e)=>{
     const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
@@ -2137,11 +2199,6 @@ setupSearchableSelect({
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
     if(!job) return;
     const v = parseFloat(inp.value);
-    if(inp.hasAttribute('data-jobfield')){
-      job.qty = (isNaN(v) || v <= 0) ? 1 : v;
-      renderPlanner();
-      return;
-    }
     const dept = inp.getAttribute('data-dept');
     const field = inp.getAttribute('data-field');
     if(!job.overrides[dept]) job.overrides[dept] = {};
