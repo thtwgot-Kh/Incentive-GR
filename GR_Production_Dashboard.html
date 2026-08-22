@@ -784,6 +784,7 @@
         <button class="connect-btn ghost" id="planExportBtn">📊 Export Excel</button>
         <button class="connect-btn ghost" id="planSaveBtn">💾 บันทึกแผนนี้</button>
         <button class="connect-btn ghost" id="planHistoryBtn">🕑 ประวัติแผน</button>
+        <button class="connect-btn ghost" id="planShareBtn">🔗 คัดลอกลิงค์แชร์</button>
       </div>
     </div>
 
@@ -1073,6 +1074,7 @@ async function attemptLogin(){
     localStorage.setItem(AUTH_LS_KEY, JSON.stringify({hash, ts: Date.now()}));
     errEl.textContent = '';
     unlockApp();
+    planApplySharedFromHash();
   }else{
     errEl.textContent = 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่';
     card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
@@ -2146,10 +2148,8 @@ function planSaveCurrentPlan(){
   alert('บันทึกแผนนี้ไว้ในประวัติแล้ว (เก็บเฉพาะในเบราว์เซอร์นี้)');
 }
 
-/** ปุ่ม "โหลด" ในประวัติ — แทนที่แผนปัจจุบันด้วยรายการที่บันทึกไว้ แล้วคำนวณใหม่ทันที */
-function planLoadHistoryEntry(id){
-  const entry = planHistoryLoadAll().find(e=> e.id === id);
-  if(!entry) return;
+/** ใช้ร่วมกันโดยทั้ง "โหลดจากประวัติ" และ "เปิดจากลิงค์ที่แชร์มา" — วางค่าที่บันทึกไว้ลงในแผนปัจจุบัน */
+function planApplySnapshotToState(entry){
   planState.customer = entry.customer || '';
   planState.po = entry.po || '';
   planState.hoursPerDay = entry.hoursPerDay > 0 ? entry.hoursPerDay : 8;
@@ -2177,7 +2177,13 @@ function planLoadHistoryEntry(id){
   document.getElementById('planStartDate').value = planState.startIso;
   document.getElementById('planScrap').value = planState.scrapPct;
   document.getElementById('planRateBasis').value = planState.rateBasis;
+}
 
+/** ปุ่ม "โหลด" ในประวัติ — แทนที่แผนปัจจุบันด้วยรายการที่บันทึกไว้ แล้วคำนวณใหม่ทันที */
+function planLoadHistoryEntry(id){
+  const entry = planHistoryLoadAll().find(e=> e.id === id);
+  if(!entry) return;
+  planApplySnapshotToState(entry);
   closePlanHistory();
   renderPlanRows();
   renderPlanner();
@@ -2207,6 +2213,7 @@ function renderPlanHistoryList(){
       </div>
       <div class="plan-history-actions">
         <button class="connect-btn ghost" data-loadplan="${e.id}">โหลด</button>
+        <button class="connect-btn ghost" data-shareplan="${e.id}" title="คัดลอกลิงค์แชร์แผนนี้">🔗</button>
         <button class="plan-move plan-del" data-delplan="${e.id}" title="ลบ">✕</button>
       </div>
     </div>`;
@@ -2218,6 +2225,54 @@ function openPlanHistory(){
 }
 function closePlanHistory(){
   document.getElementById('planHistoryOverlay').style.display = 'none';
+}
+
+// ---------- แชร์ลิงค์แผน — ฝังข้อมูลแผนไว้ใน URL เอง ไม่ต้องมีเซิร์ฟเวอร์ ----------
+// ผู้เปิดลิงค์ยังต้องผ่านรหัสผ่านแดชบอร์ดตามปกติ แล้วจะพาไปหน้าคำนวณแผนนี้พร้อมคำนวณให้ทันที
+function planEncodeSnapshot(snapshot){
+  const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
+  let bin = '';
+  bytes.forEach(b=> bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function planDecodeSnapshot(encoded){
+  let b64 = encoded.replace(/-/g,'+').replace(/_/g,'/');
+  while(b64.length % 4) b64 += '=';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+function planBuildShareUrl(snapshot){
+  const url = new URL(location.href);
+  url.hash = 'viewplan=' + planEncodeSnapshot(snapshot);
+  return url.toString();
+}
+async function planCopyShareLink(snapshot){
+  if(!snapshot || !(snapshot.jobs || []).length){
+    alert('กรอกรายการ Item ก่อนถึงจะแชร์ลิงค์ได้');
+    return;
+  }
+  const url = planBuildShareUrl(snapshot);
+  try{
+    await navigator.clipboard.writeText(url);
+    alert('คัดลอกลิงค์แผนนี้แล้ว — ส่งให้คนอื่นเปิดได้เลย (ยังต้องใส่รหัสผ่านแดชบอร์ดตามปกติ)');
+  }catch(e){
+    prompt('คัดลอกลิงค์นี้ไปแชร์ได้เลย (ยังต้องใส่รหัสผ่านแดชบอร์ดตามปกติ):', url);
+  }
+}
+/** เปิดหน้าด้วยลิงค์ที่มี #viewplan=... ต่อท้าย — ใช้ตอนล็อกอินเสร็จ (หรือถ้ายังจำรหัสผ่านอยู่แล้ว) */
+function planApplySharedFromHash(){
+  const m = /viewplan=([^&]+)/.exec(location.hash);
+  if(!m) return false;
+  let snapshot;
+  try{ snapshot = planDecodeSnapshot(m[1]); }
+  catch(e){ console.warn('อ่านลิงค์แผนที่แชร์มาไม่สำเร็จ', e); return false; }
+  planApplySnapshotToState(snapshot);
+  showPlanner();
+  renderPlanRows();
+  renderPlanner();
+  return true;
 }
 
 function renderPlanner(){
@@ -2479,11 +2534,18 @@ function refreshPlanner(){
   document.getElementById('planSaveBtn').addEventListener('click', planSaveCurrentPlan);
   document.getElementById('planHistoryBtn').addEventListener('click', openPlanHistory);
   document.getElementById('planHistoryClose').addEventListener('click', closePlanHistory);
+  document.getElementById('planShareBtn').addEventListener('click', ()=> planCopyShareLink(planSnapshotCurrent()));
   const historyOverlay = document.getElementById('planHistoryOverlay');
   historyOverlay.addEventListener('click', (e)=>{ if(e.target === historyOverlay) closePlanHistory(); });
   document.getElementById('planHistoryList').addEventListener('click', (e)=>{
     const loadBtn = e.target.closest('[data-loadplan]');
     if(loadBtn){ planLoadHistoryEntry(loadBtn.getAttribute('data-loadplan')); return; }
+    const shareBtn = e.target.closest('[data-shareplan]');
+    if(shareBtn){
+      const entry = planHistoryLoadAll().find(e=> e.id === shareBtn.getAttribute('data-shareplan'));
+      if(entry) planCopyShareLink(entry);
+      return;
+    }
     const delBtn = e.target.closest('[data-delplan]');
     if(delBtn && confirm('ลบแผนนี้ออกจากประวัติ?')) planDeleteHistoryEntry(delBtn.getAttribute('data-delplan'));
   });
@@ -3096,6 +3158,9 @@ function renderTable(data){
 }
 
 initFromData(SNAPSHOT_DATA);
+
+// ผู้ที่ยังจำล็อกอินอยู่แล้วเปิดลิงค์ที่แชร์มา — พาไปหน้าแผนนั้นทันทีโดยไม่ต้องกรอกรหัสผ่านซ้ำ
+if(checkExistingAuth()) planApplySharedFromHash();
 </script>
 </body>
 </html>
