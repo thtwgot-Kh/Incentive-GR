@@ -1528,6 +1528,10 @@ function standardStepRank(dept){
   const i = STEP_ORDER.indexOf(dept);
   return i !== -1 ? {rank: i + 1, src: 'standard'} : {rank: null, src: 'standalone'};
 }
+/** กุญแจของขั้นตอนหนึ่ง = หน่วยงาน + ชิ้นส่วน(วัตถุดิบ) — Item เดียวกันอาจมีหลายชิ้นส่วนผ่านหน่วยงานเดียวกัน (เช่น เจียร์บอล กับ เจียร์พิน) */
+function planStepKey(dept, material){
+  return dept + '' + (material || '').trim();
+}
 
 // หนึ่งแผน = ลูกค้า + เลขที่ใบสั่งผลิต + รายการ Item ที่ต้องผลิตเรียงตามลำดับที่จะขึ้นงาน
 const planState = {
@@ -1538,7 +1542,7 @@ const planState = {
   shiftStart: '08:00',
   scrapPct: 0,
   rateBasis: 'target_100',
-  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty, startAt}
+  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: stepKey (dept+material) -> {rate, stations, qty, startAt}
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
 };
@@ -1642,7 +1646,7 @@ function planItemOptions(){
 function planManualStepShell(dept){
   const rank = standardStepRank(dept);
   return {
-    dept, n: 0, actual: 0, hours: 0, t95: [], t100: [], material: '', material_date: '',
+    key: planStepKey(dept, ''), dept, material: '', n: 0, actual: 0, hours: 0, t95: [], t100: [],
     rate_target_95: null, rate_target_100: null, rate_actual: null,
     rank: rank.rank, rank_src: 'manual'
   };
@@ -1653,27 +1657,28 @@ function planDeptOptions(){
   return [...new Set([...STEP_ORDER, ...allDepts])];
 }
 
-/** สรุปสถิติย้อนหลังของ Item หนึ่ง แยกตามขั้นตอน (หน่วยงาน)
+/** สรุปสถิติย้อนหลังของ Item หนึ่ง แยกตาม "ชิ้นส่วน" (วัตถุดิบ) + หน่วยงาน — Item ที่เป็นเซ็ต
+ *  (เช่น มีบอล/พิน/ปลอกคอในรหัสเดียวกัน) จะได้แถวแยกกันแม้อยู่หน่วยงานเดียวกัน (เช่น เจียร์บอล/เจียร์พิน)
  *  manualDepts = รายชื่อหน่วยงานที่ผู้ใช้เพิ่มเอง (สำหรับ Item ที่ไม่มี/ไม่ครบข้อมูลย้อนหลัง) */
 function buildPlanSteps(item, userOrder, manualDepts){
   const rows = item ? RAW.filter(r=> (r.item_code||'') === item && r.dept) : [];
-  const byDept = new Map();
+  const byKey = new Map();
   rows.forEach(r=>{
-    let s = byDept.get(r.dept);
+    const material = (r.material || '').trim();
+    const key = planStepKey(r.dept, material);
+    let s = byKey.get(key);
     if(!s){
-      s = {dept:r.dept, n:0, actual:0, hours:0, t95:[], t100:[], material:'', material_date:''};
-      byDept.set(r.dept, s);
+      s = {key, dept:r.dept, material, n:0, actual:0, hours:0, t95:[], t100:[]};
+      byKey.set(key, s);
     }
     s.n++;
     if(r.actual_pcs) s.actual += r.actual_pcs;
     if(r.machine_hours) s.hours += r.machine_hours;
     if(r.target_95) s.t95.push(r.target_95);
     if(r.target_100) s.t100.push(r.target_100);
-    // วัตถุดิบของ Item เดียวกันเปลี่ยนได้ตามงาน จึงยึดชื่อจากบรรทัดล่าสุดของขั้นตอนนั้น
-    if(r.material && (r.date_iso||'') >= s.material_date){ s.material = r.material; s.material_date = r.date_iso || ''; }
   });
 
-  const steps = [...byDept.values()];
+  const steps = [...byKey.values()];
   steps.forEach(s=>{
     s.rate_target_95 = planMedian(s.t95);
     s.rate_target_100 = planMedian(s.t100);
@@ -1683,33 +1688,52 @@ function buildPlanSteps(item, userOrder, manualDepts){
     s.rank_src = rank.src;
   });
 
-  // เติมขั้นตอนที่ผู้ใช้เพิ่มเอง — ข้ามหน่วยงานที่มีข้อมูลย้อนหลังจริงอยู่แล้ว
+  // เติมขั้นตอนที่ผู้ใช้เพิ่มเอง — ข้ามหน่วยงานที่มีข้อมูลย้อนหลังจริงอยู่แล้ว (ไม่ว่าจะกี่ชิ้นส่วนก็ตาม)
+  const usedDeptsForManual = new Set(steps.map(s=> s.dept));
   (manualDepts || []).forEach(dept=>{
-    if(byDept.has(dept)) return;
+    if(usedDeptsForManual.has(dept)) return;
     steps.push(planManualStepShell(dept));
   });
 
-  // สายหลักเรียงตาม STEP_ORDER ส่วนขั้นตอนแยกไปต่อท้าย เรียงตามชื่อ
+  // จัดกลุ่มขั้นตอนตาม "ชิ้นส่วน" (ชื่อวัตถุดิบ) ก่อน แล้วค่อยเรียงขั้นตอนภายในชิ้นส่วนตาม STEP_ORDER
+  // เพราะแต่ละชิ้นส่วนของเซ็ตต้องทำให้ครบตามลำดับของมันเองก่อน ค่อยขึ้นชิ้นส่วนถัดไป (ไม่สลับขั้นตอนข้ามชิ้นส่วนกัน)
   const byRoute = (a,b)=>{
     if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
     if(a.rank == null) return a.dept.localeCompare(b.dept);
     return a.rank - b.rank || a.dept.localeCompare(b.dept);
   };
-  steps.sort(byRoute);
+  const parts = new Map();
+  steps.forEach(s=>{
+    if(!parts.has(s.material)) parts.set(s.material, []);
+    parts.get(s.material).push(s);
+  });
+  const partList = [...parts.values()];
+  partList.forEach(p=> p.sort(byRoute));
+  const partRank = (p)=>{
+    const ranked = p.filter(s=> s.rank != null);
+    return ranked.length ? Math.min(...ranked.map(s=> s.rank)) : null;
+  };
+  partList.sort((a,b)=>{
+    const ra = partRank(a), rb = partRank(b);
+    if((ra == null) !== (rb == null)) return ra == null ? 1 : -1;
+    if(ra == null) return a[0].material.localeCompare(b[0].material);
+    return ra - rb || a[0].material.localeCompare(b[0].material);
+  });
+  let orderedSteps = partList.flat();
 
-  // ผู้ใช้เคยจัดลำดับสายหลักเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
+  // ผู้ใช้เคยจัดลำดับขั้นตอนเองไว้ (ทีละแถว) ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้ายกลุ่มชิ้นส่วนเดิม)
   if(userOrder && userOrder.length){
-    steps.sort((a,b)=>{
+    orderedSteps.sort((a,b)=>{
       if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
       if(a.rank == null) return byRoute(a,b);
-      const ia = userOrder.indexOf(a.dept), ib = userOrder.indexOf(b.dept);
+      const ia = userOrder.indexOf(a.key), ib = userOrder.indexOf(b.key);
       if(ia === -1 && ib === -1) return byRoute(a,b);
       if(ia === -1) return 1;
       if(ib === -1) return -1;
       return ia - ib;
     });
   }
-  return steps;
+  return orderedSteps;
 }
 
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
@@ -1766,7 +1790,7 @@ function renderPlanRows(){
 
 /** อัตราการผลิตที่จะใช้คำนวณของขั้นตอนหนึ่ง (ชิ้น/ชม.) ตามฐานที่เลือก */
 function planStepRate(step, job){
-  const ov = job.overrides[step.dept];
+  const ov = job.overrides[step.key];
   if(ov && ov.rate > 0) return {rate: ov.rate, src: 'manual'};
   const order = planState.rateBasis === 'actual' ? ['rate_actual','rate_target_95','rate_target_100']
               : planState.rateBasis === 'target_100' ? ['rate_target_100','rate_target_95','rate_actual']
@@ -1777,7 +1801,7 @@ function planStepRate(step, job){
   return {rate: null, src: null};
 }
 function planStepStations(step, job){
-  const ov = job.overrides[step.dept];
+  const ov = job.overrides[step.key];
   return (ov && ov.stations > 0) ? ov.stations : 1;
 }
 
@@ -1804,17 +1828,31 @@ function computePlan(){
     const extra = job.steps.filter(s=> s.rank == null).map(s=>({step:s}));
 
     const manualQty = (r)=>{
-      const ov = job.overrides[r.step.dept];
+      const ov = job.overrides[r.step.key];
       return (ov && ov.qty > 0) ? ov.qty : null;
     };
-    let need = qty;
-    for(let i = main.length-1; i >= 0; i--){
-      const manual = manualQty(main[i]);
-      main[i].qty_out = need;
-      main[i].qty_in = manual != null ? manual : (keep > 0 ? need/keep : need);
-      main[i].qty_manual = manual != null;
-      need = main[i].qty_in;
-    }
+    // เดินย้อนจากขั้นตอนสุดท้ายไปต้นสายของแต่ละ "ชิ้นส่วน" (วัตถุดิบ) แยกกัน — Item ที่เป็นเซ็ต
+    // (บอล/พิน/ปลอกคอ ในรหัสเดียวกัน) แต่ละชิ้นส่วนต้องขึ้นงานให้ครบ qty ของตัวเองอย่างอิสระต่อกัน
+    // จัดกลุ่มด้วยวัตถุดิบแทนตำแหน่งในแถว เผื่อผู้ใช้สลับลำดับแถวจนชิ้นส่วนเดียวกันไม่ติดกัน
+    const byMaterial = new Map();
+    main.forEach((r,idx)=>{
+      const mat = r.step.material;
+      if(!byMaterial.has(mat)) byMaterial.set(mat, []);
+      byMaterial.get(mat).push(idx);
+    });
+    let mainStartQty = 0;
+    byMaterial.forEach(indices=>{
+      let need = qty;
+      for(let k = indices.length-1; k >= 0; k--){
+        const r = main[indices[k]];
+        const manual = manualQty(r);
+        r.qty_out = need;
+        r.qty_in = manual != null ? manual : (keep > 0 ? need/keep : need);
+        r.qty_manual = manual != null;
+        need = r.qty_in;
+      }
+      mainStartQty += need;
+    });
     // ขั้นตอนแยกไม่ได้อยู่ในโซ่นี้ จึงเผื่อของเสียชั้นเดียวจากยอดที่ต้องการ
     extra.forEach(r=>{
       const manual = manualQty(r);
@@ -1837,7 +1875,7 @@ function computePlan(){
       fillRow(r);
 
       // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
-      const ov = job.overrides[r.step.dept];
+      const ov = job.overrides[r.step.key];
       if(ov && ov.startAt){
         const manualDt = new Date(ov.startAt);
         if(!isNaN(manualDt.getTime())) cursor = planClampToShift(manualDt, hpd, shiftMin);
@@ -1865,7 +1903,7 @@ function computePlan(){
     const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
     return {
       job, main, extra, qty,
-      startQty: main.length ? main[0].qty_in : (extra.length ? extra[0].qty_in : qty),
+      startQty: main.length ? mainStartQty : (extra.length ? extra[0].qty_in : qty),
       mainHours, extraHours,
       totalHours: mainHours + extraHours,
       mainDays: mainHours/hpd,
@@ -2321,6 +2359,7 @@ function renderPlanner(){
   const rowHtml = (r, job, no, lastNo)=>{
     const c = getDeptColor(r.step.dept);
     const dept = escapeHtml(r.step.dept).replace(/"/g,'&quot;');
+    const stepKey = escapeHtml(r.step.key).replace(/"/g,'&quot;');
     const material = cleanMaterialDisplay(r.step.material || '');
     const srcLabel = r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src] || '') : 'ไม่มีข้อมูล';
     const seq = no
@@ -2333,14 +2372,14 @@ function renderPlanner(){
       <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml((r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">เฉพาะบอลบางไซส์</div>' : ''}${r.step.rank_src === 'manual' ? `<button class="plan-move plan-del plan-del-step" data-delstep="${dept}" data-job="${job.uid}" title="ลบขั้นตอนที่เพิ่มเอง">✕</button>` : ''}</td>
       <td><div class="plan-material" title="${escapeHtml(material).replace(/"/g,'&quot;')}">${material ? escapeHtml(planShortMaterial(material)) : '—'}</div></td>
       <td class="num">
-        <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
+        <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-key="${stepKey}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
       </td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-job="${job.uid}" data-dept="${dept}" value="${r.stations}">
+        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-job="${job.uid}" data-key="${stepKey}" value="${r.stations}">
       </td>
       <td class="num">
-        <input class="plan-cell-input${r.qty_manual ? ' manual' : ''}" type="number" min="0" step="1" data-field="qty" data-job="${job.uid}" data-dept="${dept}" value="${Math.round(r.qty_in)}">
+        <input class="plan-cell-input${r.qty_manual ? ' manual' : ''}" type="number" min="0" step="1" data-field="qty" data-job="${job.uid}" data-key="${stepKey}" value="${Math.round(r.qty_in)}">
         ${r.qty_manual ? '<div class="plan-src manual">แก้เอง</div>' : ''}
       </td>
       <td class="num mono">${r.hours != null ? fmtHM(r.hours) : '—'}</td>
@@ -2348,8 +2387,8 @@ function renderPlanner(){
       <td class="mono plan-daterange">
         <div>${r.start_dt ? planFmtDateTime(r.start_dt) + ' → ' + planFmtDateTime(r.end_dt) : '—'}</div>
         ${r.start_dt ? `<div class="plan-start-edit">
-          <input class="plan-cell-input plan-start-input" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-dept="${dept}" value="${planFmtDateTimeLocal(r.start_dt)}" title="แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง">
-          ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${dept}" data-job="${job.uid}" title="ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ">✕</button>` : ''}
+          <input class="plan-cell-input plan-start-input" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-key="${stepKey}" value="${planFmtDateTimeLocal(r.start_dt)}" title="แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง">
+          ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${stepKey}" data-job="${job.uid}" title="ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ">✕</button>` : ''}
         </div>${r.start_override ? '<div class="plan-src manual">แก้เอง</div>' : ''}` : ''}
       </td>
       <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
@@ -2468,12 +2507,13 @@ function renderPlanner(){
       <ul>
         <li><b>ลำดับ Item</b> — Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ) สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง</li>
         <li><b>ลำดับขั้นตอน</b> — ในชีตไม่มีคอลัมน์ลำดับขั้นตอน (step order) ระบบจึงใช้ลำดับมาตรฐานของสายหลัก: รีด → ปั๊ม → เปเปอร์ → ตัดยาง → ทากาว → เจียร์ → เจียร์(หยาบ) → เจียร์(ละเอียด) → เจาะ โดยเจียร์(หยาบ)/(ละเอียด) ทำเฉพาะบอลบางไซส์ — ปรับลำดับด้วยปุ่ม ▲▼ ได้</li>
+        <li><b>Item ที่เป็นเซ็ต (หลายชิ้นส่วน)</b> — ถ้า Item เดียวกันมีมากกว่า 1 ชิ้นส่วน/วัตถุดิบผ่านหน่วยงานเดียวกัน (เช่น เจียร์บอล กับ เจียร์พิน ของเซ็ตลูกโบว์ลิ่ง) ระบบจะแยกเป็นคนละแถวให้อัตโนมัติตามชื่อวัตถุดิบ แล้วทำให้ครบทุกขั้นตอนของชิ้นส่วนหนึ่งก่อน จึงขึ้นชิ้นส่วนถัดไป (ไม่ทำสลับข้ามชิ้นส่วนกัน)</li>
         ${extraNote}
         <li><b>อัตราการผลิต</b> — ค่ามัธยฐานของเป้าหมายที่บันทึกไว้ (ชิ้น/ชม.) หรืออัตราจริง = ผลิตได้จริงรวม ÷ ชั่วโมงเครื่องจักรรวม ตามฐานที่เลือกด้านบน</li>
         <li><b>เวลา</b> — ชั่วโมง = จำนวนชิ้น ÷ (อัตรา × จำนวนสถานี) นับเฉพาะเวลาเดินเครื่อง ไม่รวมเวลาตั้งเครื่อง รอของ หรือขนย้ายระหว่างขั้นตอน</li>
         <li><b>วันที่และเวลา</b> — แปลงจากชั่วโมงด้วยชั่วโมงทำงาน/วันและเวลาเริ่มกะที่กรอก ข้ามวันอาทิตย์ตามปฏิทินโรงงาน แก้เวลาเริ่มของขั้นตอนไหนเองได้ในช่อง “ช่วงวันที่” ของตาราง เพื่อให้สอดคล้องกับความเป็นจริง (เช่น เริ่มช้ากว่าที่คำนวณไว้) ขั้นตอนถัดไปจะคำนวณต่อจากเวลานั้นให้อัตโนมัติ — กดปุ่ม ✕ เพื่อล้างค่าที่แก้เองแล้วกลับไปคำนวณต่อเนื่องตามปกติ</li>
-        <li><b>ของเสีย</b> — เผื่อเป็น % เท่ากันทุกขั้นตอนตามที่กรอก ไล่ย้อนจากขั้นสุดท้ายขึ้นไป (ต้นสายจึงต้องขึ้นงานมากกว่าปลายสาย) ถ้าพิมพ์จำนวน “ต้องทำ” เองที่ขั้นตอนไหน จะยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไป</li>
-        <li><b>ชื่อวัตถุดิบ</b> — ดึงจากบรรทัดล่าสุดของ Item นั้นในแต่ละขั้นตอน (Item เดียวกันอาจใช้วัตถุดิบต่างกันได้ตามงาน) ชี้ที่ชื่อเพื่อดูชื่อเต็ม</li>
+        <li><b>ของเสีย</b> — เผื่อเป็น % เท่ากันทุกขั้นตอนตามที่กรอก ไล่ย้อนจากขั้นสุดท้ายของแต่ละชิ้นส่วนขึ้นไป (ต้นสายของชิ้นส่วนนั้นจึงต้องขึ้นงานมากกว่าปลายสาย) แต่ละชิ้นส่วนคำนวณแยกจากกัน ถ้าพิมพ์จำนวน “ต้องทำ” เองที่ขั้นตอนไหน จะยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไปเฉพาะชิ้นส่วนนั้น</li>
+        <li><b>ชื่อวัตถุดิบ</b> — Item เดียวกันอาจมีได้หลายชื่อวัตถุดิบ (หลายชิ้นส่วน) ต่อหน่วยงาน ระบบจะแยกเป็นคนละแถวให้ครบทุกชื่อที่เจอในข้อมูลย้อนหลัง ชี้ที่ชื่อเพื่อดูชื่อเต็ม</li>
         ${warnHtml}
       </ul>
     </div>`;
@@ -2624,9 +2664,10 @@ function refreshPlanner(){
       const job = planFindJob(parseInt(delManual.getAttribute('data-job'), 10));
       if(!job) return;
       const dept = delManual.getAttribute('data-delstep');
+      const key = planStepKey(dept, '');   // ขั้นตอนที่เพิ่มเองไม่มีวัตถุดิบ จึงกุญแจ = หน่วยงานล้วนๆ
       job.manualSteps = (job.manualSteps || []).filter(d=> d !== dept);
-      delete job.overrides[dept];
-      job.order = (job.order || []).filter(d=> d !== dept);
+      delete job.overrides[key];
+      job.order = (job.order || []).filter(k=> k !== key);
       job.steps = buildPlanSteps(job.item || null, job.order, job.manualSteps);
       renderPlanner();
       return;
@@ -2636,8 +2677,8 @@ function refreshPlanner(){
     if(clearStart){
       const job = planFindJob(parseInt(clearStart.getAttribute('data-job'), 10));
       if(!job) return;
-      const dept = clearStart.getAttribute('data-clearstart');
-      if(job.overrides[dept]) job.overrides[dept].startAt = null;
+      const key = clearStart.getAttribute('data-clearstart');
+      if(job.overrides[key]) job.overrides[key].startAt = null;
       renderPlanner();
       return;
     }
@@ -2651,7 +2692,7 @@ function refreshPlanner(){
     if(j2 < 0 || j2 >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
     const s = job.steps;
     [s[i], s[j2]] = [s[j2], s[i]];
-    job.order = s.map(x=> x.dept);
+    job.order = s.map(x=> x.key);
     renderPlanner();
   });
   // ใช้ change ไม่ใช่ input — ตารางถูกวาดใหม่ทุกครั้งที่ค่าเปลี่ยน ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
@@ -2660,17 +2701,17 @@ function refreshPlanner(){
     if(!inp) return;
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
     if(!job) return;
-    const dept = inp.getAttribute('data-dept');
+    const key = inp.getAttribute('data-key');
     const field = inp.getAttribute('data-field');
-    if(!job.overrides[dept]) job.overrides[dept] = {};
+    if(!job.overrides[key]) job.overrides[key] = {};
     // เวลาเริ่มขั้นตอน (แก้เองให้สอดคล้องกับความเป็นจริง) เป็นข้อความวันที่-เวลา ไม่ใช่ตัวเลข
     if(field === 'startAt'){
-      job.overrides[dept].startAt = inp.value || null;
+      job.overrides[key].startAt = inp.value || null;
       renderPlanner();
       return;
     }
     const v = parseFloat(inp.value);
-    job.overrides[dept][field] = (isNaN(v) || v <= 0) ? null : v;
+    job.overrides[key][field] = (isNaN(v) || v <= 0) ? null : v;
     renderPlanner();
   });
 })();
