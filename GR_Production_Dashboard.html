@@ -744,7 +744,7 @@
         <span class="filter-label">ฐานอัตราการผลิต</span>
         <select id="planRateBasis" class="connect-select prod-dept-select">
           <option value="target_95">เป้าหมาย 95% (ที่ใช้คิดยอดต้องทำ)</option>
-          <option value="target_100">เป้าหมาย 100%</option>
+          <option value="target_100" selected>เป้าหมาย 100%</option>
           <option value="actual">อัตราจริงเฉลี่ยย้อนหลัง</option>
         </select>
       </div>
@@ -1498,7 +1498,7 @@ const planState = {
   hoursPerDay: 8,
   startIso: '',
   scrapPct: 0,
-  rateBasis: 'target_95',
+  rateBasis: 'target_100',
   jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
