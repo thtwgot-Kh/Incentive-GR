@@ -535,7 +535,7 @@
   .plan-add-bar{margin-top:-10px;}
   .plan-add-btn{align-self:stretch;white-space:nowrap;}
   .kpi .value.plan-text{font-size:17px;line-height:1.4;}
-  .plan-step-table{min-width:1020px;}
+  .plan-step-table{min-width:1120px;}
   .plan-cell-input{
     width:84px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
     padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:12px;text-align:right;
@@ -555,6 +555,9 @@
   .plan-src{font-family:var(--mono);font-size:10px;color:var(--text-faint);white-space:nowrap;}
   .plan-src.manual{color:var(--accent);}
   .plan-src.guess{color:var(--warn);}
+  .plan-daterange{min-width:230px;}
+  .plan-start-edit{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:nowrap;}
+  .plan-start-input{width:190px;min-width:190px;text-align:left;padding:5px 6px;flex:none;}
   .plan-material{font-size:11.5px;color:var(--text-dim);line-height:1.5;max-width:260px;}
   .plan-tot td{border-top:1px solid var(--border);font-weight:600;color:var(--text);}
   .plan-sep td{
@@ -735,6 +738,10 @@
       <div class="filter-group">
         <span class="filter-label">เริ่มผลิตวันที่</span>
         <input type="date" id="planStartDate" class="search-box plan-num">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">เวลาเริ่มกะ</span>
+        <input type="time" id="planShiftStart" class="search-box plan-num" value="08:00">
       </div>
       <div class="filter-group">
         <span class="filter-label">เผื่อของเสีย (%)</span>
@@ -1497,9 +1504,10 @@ const planState = {
   po: '',
   hoursPerDay: 8,
   startIso: '',
+  shiftStart: '08:00',
   scrapPct: 0,
   rateBasis: 'target_100',
-  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
+  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty, startAt}
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
 };
@@ -1535,6 +1543,60 @@ function planAddWorkingDays(iso, days){
   const mm = String(d.getMonth()+1).padStart(2,'0');
   const dd = String(d.getDate()).padStart(2,'0');
   return d.getFullYear() + '-' + mm + '-' + dd;
+}
+function planTimeToMinutes(hhmm){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm||'').trim());
+  if(!m) return 8*60;
+  return Math.min(23*60+59, Math.max(0, parseInt(m[1],10)*60 + parseInt(m[2],10)));
+}
+/** เลื่อนเวลาไปยังจุดเริ่มกะที่ใกล้ที่สุด ถ้ายังไม่อยู่ในช่วงเวลาทำงาน (ข้ามวันอาทิตย์) */
+function planClampToShift(from, hpd, shiftMin){
+  let d = new Date(from.getTime());
+  const setToShiftStart = ()=>{ d.setHours(0,0,0,0); d.setMinutes(shiftMin); };
+  if(d.getDay() === 0){ d.setDate(d.getDate()+1); setToShiftStart(); return d; }
+  const dayEndMin = shiftMin + hpd*60;
+  const curMin = d.getHours()*60 + d.getMinutes();
+  if(curMin < shiftMin){
+    setToShiftStart();
+  } else if(curMin >= dayEndMin){
+    d.setDate(d.getDate()+1);
+    while(d.getDay() === 0) d.setDate(d.getDate()+1);
+    setToShiftStart();
+  }
+  return d;
+}
+/** เดินเวลาทำงานไปข้างหน้าตามจำนวนชั่วโมง ข้ามช่วงนอกกะและวันอาทิตย์ */
+function planAdvanceHours(from, hours, hpd, shiftMin){
+  let d = planClampToShift(from, hpd, shiftMin);
+  let remain = Math.max(0, hours || 0);
+  const dayEndMin = shiftMin + hpd*60;
+  while(remain > 1e-9){
+    const curMin = d.getHours()*60 + d.getMinutes();
+    const availHr = (dayEndMin - curMin)/60;
+    if(remain <= availHr + 1e-9){
+      d = new Date(d.getTime() + remain*3600000);
+      remain = 0;
+    } else {
+      remain -= availHr;
+      d.setDate(d.getDate()+1);
+      while(d.getDay() === 0) d.setDate(d.getDate()+1);
+      d.setHours(0,0,0,0); d.setMinutes(shiftMin);
+    }
+  }
+  return d;
+}
+/** แสดงวันที่ + เวลา แบบ D/M/YYYY HH:MM */
+function planFmtDateTime(dt){
+  if(!dt) return '—';
+  const datePart = dt.getDate() + '/' + (dt.getMonth()+1) + '/' + dt.getFullYear();
+  const timePart = String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+  return datePart + ' ' + timePart;
+}
+/** ค่าสำหรับ <input type="datetime-local"> */
+function planFmtDateTimeLocal(dt){
+  if(!dt) return '';
+  const p = n=> String(n).padStart(2,'0');
+  return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+'T'+p(dt.getHours())+':'+p(dt.getMinutes());
 }
 function planShortMaterial(text){
   if(!text) return '';
@@ -1698,8 +1760,14 @@ function computePlan(){
   const hpd = planState.hoursPerDay > 0 ? planState.hoursPerDay : 8;
   const keep = 1 - Math.min(90, Math.max(0, planState.scrapPct))/100;
   const startIso = planState.startIso || planTodayIso();
+  const shiftMin = planTimeToMinutes(planState.shiftStart);
 
-  let cum = 0;
+  const seedP = startIso.split('-').map(Number);
+  const seedDt = new Date(seedP[0], seedP[1]-1, seedP[2], Math.floor(shiftMin/60), shiftMin%60);
+  let cursor = planClampToShift(seedDt, hpd, shiftMin);   // เวลาจริง รวมเวลาเริ่มที่แก้เอง — ใช้แสดงวันที่/เวลาจริง
+  const startDt = new Date(cursor.getTime());
+
+  let cum = 0;   // จำนวนวันสะสมแบบเรียงต่อกันไม่มีช่องว่าง — ใช้วาดไทม์ไลน์โดยประมาณเท่านั้น
   const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
     const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
@@ -1735,16 +1803,26 @@ function computePlan(){
     }
 
     const jobStartDay = cum;
+    const jobStartDt = new Date(cursor.getTime());
     main.forEach(r=>{
       fillRow(r);
       r.start_day = cum;
       if(r.days != null) cum += r.days;
       r.end_day = cum;
-      r.start_iso = r.days != null ? planAddWorkingDays(startIso, Math.floor(r.start_day)) : null;
-      r.end_iso = r.days != null ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1)) : null;
+
+      // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
+      const ov = job.overrides[r.step.dept];
+      if(ov && ov.startAt){
+        const manualDt = new Date(ov.startAt);
+        if(!isNaN(manualDt.getTime())) cursor = planClampToShift(manualDt, hpd, shiftMin);
+      }
+      r.start_override = !!(ov && ov.startAt);
+      r.start_dt = new Date(cursor.getTime());
+      if(r.days != null) cursor = planAdvanceHours(cursor, r.hours, hpd, shiftMin);
+      r.end_dt = r.days != null ? new Date(cursor.getTime()) : null;
     });
     // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากจุดเริ่มของ Item นั้น
-    extra.forEach(r=>{ fillRow(r); r.start_day = jobStartDay; r.end_day = jobStartDay + (r.days || 0); r.start_iso = null; r.end_iso = null; });
+    extra.forEach(r=>{ fillRow(r); r.start_day = jobStartDay; r.end_day = jobStartDay + (r.days || 0); r.start_dt = null; r.end_dt = null; });
 
     const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
     const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
@@ -1757,8 +1835,8 @@ function computePlan(){
       totalDays: (mainHours + extraHours)/hpd,
       start_day: jobStartDay,
       end_day: cum,
-      start_iso: main.length ? planAddWorkingDays(startIso, Math.floor(jobStartDay)) : null,
-      end_iso: main.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : null
+      start_dt: main.length ? jobStartDt : null,
+      end_dt: main.length ? new Date(cursor.getTime()) : null
     };
   });
 
@@ -1781,7 +1859,8 @@ function computePlan(){
     totalHours: agg('totalHours'),
     mainDays: agg('mainHours')/hpd,
     totalDays: agg('totalHours')/hpd,
-    finishIso: planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)),
+    startDt,
+    finishDt: new Date(cursor.getTime()),
     missingRate: jobs.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
     bottleneck
   };
@@ -1947,7 +2026,7 @@ function planExportExcel(){
     [],
     ['ลูกค้า', planState.customer || '—'],
     ['เลขที่ใบสั่งผลิต', planState.po || '—'],
-    ['เริ่มผลิตวันที่', planFmtDate(plan.startIso)],
+    ['เริ่มผลิตวันที่', planFmtDateTime(plan.startDt)],
     ['ชั่วโมงทำงาน/วัน', plan.hpd],
     ['เผื่อของเสีย (%)', planState.scrapPct],
     ['ฐานอัตราการผลิต', rateBasisLabel],
@@ -1959,7 +2038,7 @@ function planExportExcel(){
     ['  - สายหลัก (ชม.)', planRound2(plan.mainHours)],
     ['  - ขั้นตอนแยก (ชม.)', planRound2(plan.extraHours)],
     ['จำนวนวันทำงาน (สายหลัก)', planRound2(plan.mainDays)],
-    ['คาดว่าเสร็จทั้งแผน', planFmtDate(plan.finishIso)],
+    ['คาดว่าเสร็จทั้งแผน', planFmtDateTime(plan.finishDt)],
     ['ขั้นตอนคอขวด', plan.bottleneck ? (plan.bottleneck.row.step.dept + ' (' + plan.bottleneck.job.item + ')') : '—'],
     ['ขั้นตอนที่ไม่มีอัตราการผลิต (รายการ)', plan.missingRate]
   ];
@@ -1972,7 +2051,7 @@ function planExportExcel(){
         i+1, jp.job.item, jp.qty, kind, no || '', r.step.dept,
         r.step.material || '', r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'ไม่มีข้อมูล',
         r.stations, Math.round(r.qty_in), r.hours != null ? planRound2(r.hours) : '', r.days != null ? planRound2(r.days) : '',
-        r.start_iso ? planFmtDate(r.start_iso) : '', r.end_iso ? planFmtDate(r.end_iso) : '', r.step.n
+        r.start_dt ? planFmtDateTime(r.start_dt) : '', r.end_dt ? planFmtDateTime(r.end_dt) : '', r.step.n
       ]);
     };
     jp.main.forEach((r,k)=> pushRow(r, k+1, 'สายหลัก'));
@@ -2009,16 +2088,16 @@ function renderPlanner(){
      sub:'รวมที่ต้องส่งมอบ %q ชิ้น'.replace('%q', fmtNum(plan.qty)), cls:''},
     {label:'ต้องขึ้นงานเริ่มต้น', value:fmtNum(plan.startQty), unit:'ชิ้น',
      sub:'ให้ได้ของดี %s ชิ้น (เผื่อของเสีย %p%)'.replace('%s', fmtNum(plan.qty)).replace('%p', fmtNum(planState.scrapPct,1)), cls:''},
-    {label:'เวลาที่ต้องใช้รวม', value:fmtNum(plan.totalHours,1), unit:'ชม.',
-     sub: split ? 'สายหลัก %m ชม. + ขั้นตอนแยก %e ชม.'.replace('%m', fmtNum(plan.mainHours,1)).replace('%e', fmtNum(plan.extraHours,1))
+    {label:'เวลาที่ต้องใช้รวม', value:fmtHM(plan.totalHours), unit:'ชม.',
+     sub: split ? 'สายหลัก %m ชม. + ขั้นตอนแยก %e ชม.'.replace('%m', fmtHM(plan.mainHours)).replace('%e', fmtHM(plan.extraHours))
                 : 'รวมทุกขั้นตอนทุก Item แบบทำต่อกัน', cls:''},
     {label:'จำนวนวันทำงาน', value:fmtNum(plan.mainDays,1), unit:'วัน',
      sub:'ที่ %h ชม./วัน'.replace('%h', fmtNum(plan.hpd,1)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
-    {label:'คาดว่าเสร็จทั้งแผน', value:planFmtDate(plan.finishIso), unit:'', textValue:true,
-     sub:'เริ่ม %d · ข้ามวันอาทิตย์'.replace('%d', planFmtDate(plan.startIso)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
+    {label:'คาดว่าเสร็จทั้งแผน', value:planFmtDateTime(plan.finishDt), unit:'', textValue:true,
+     sub:'เริ่ม %d · ข้ามวันอาทิตย์'.replace('%d', planFmtDateTime(plan.startDt)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
     {label:'ขั้นตอนคอขวด',
      value: plan.bottleneck ? escapeHtml((plan.bottleneck.row.step.dept)) : '—', unit:'', textValue:true,
-     sub: plan.bottleneck ? '%i · ใช้เวลา %h ชม. มากที่สุด'.replace('%h', fmtNum(plan.bottleneck.row.hours,1)).replace('%i', escapeHtml(plan.bottleneck.job.item)) : '—',
+     sub: plan.bottleneck ? '%i · ใช้เวลา %h ชม. มากที่สุด'.replace('%h', fmtHM(plan.bottleneck.row.hours)).replace('%i', escapeHtml(plan.bottleneck.job.item)) : '—',
      cls:'bad'},
   ];
 
@@ -2055,9 +2134,15 @@ function renderPlanner(){
         <input class="plan-cell-input${r.qty_manual ? ' manual' : ''}" type="number" min="0" step="1" data-field="qty" data-job="${job.uid}" data-dept="${dept}" value="${Math.round(r.qty_in)}">
         ${r.qty_manual ? '<div class="plan-src manual">แก้เอง</div>' : ''}
       </td>
-      <td class="num mono">${r.hours != null ? fmtNum(r.hours,2) : '—'}</td>
+      <td class="num mono">${r.hours != null ? fmtHM(r.hours) : '—'}</td>
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
-      <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
+      <td class="mono plan-daterange">
+        <div>${r.start_dt ? planFmtDateTime(r.start_dt) + ' → ' + planFmtDateTime(r.end_dt) : '—'}</div>
+        ${r.start_dt ? `<div class="plan-start-edit">
+          <input class="plan-cell-input plan-start-input" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-dept="${dept}" value="${planFmtDateTimeLocal(r.start_dt)}" title="แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง">
+          ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${dept}" data-job="${job.uid}" title="ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ">✕</button>` : ''}
+        </div>${r.start_override ? '<div class="plan-src manual">แก้เอง</div>' : ''}` : ''}
+      </td>
       <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
     </tr>`;
   };
@@ -2071,16 +2156,16 @@ function renderPlanner(){
     const totalRows = (jp.extra.length ? `
             <tr class="plan-tot">
               <td colspan="6">รวมเฉพาะสายหลัก</td>
-              <td class="num mono">${fmtNum(jp.mainHours,2)}</td>
+              <td class="num mono">${fmtHM(jp.mainHours)}</td>
               <td class="num mono">${fmtNum(jp.mainDays,2)}</td>
-              <td class="mono">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : '—'}</td>
+              <td class="mono">${jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : '—'}</td>
               <td></td>
             </tr>` : '') + `
             <tr class="plan-tot">
               <td colspan="6">รวม Item นี้</td>
-              <td class="num mono">${fmtNum(jp.totalHours,2)}</td>
+              <td class="num mono">${fmtHM(jp.totalHours)}</td>
               <td class="num mono">${fmtNum(jp.totalDays,2)}</td>
-              <td class="mono">${jp.extra.length ? '—' : (jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : '—')}</td>
+              <td class="mono">${jp.extra.length ? '—' : (jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : '—')}</td>
               <td></td>
             </tr>`;
     const noSteps = !jp.main.length && !jp.extra.length;
@@ -2098,7 +2183,7 @@ function renderPlanner(){
         <div class="plan-job-id">
           <span class="plan-job-no">#${i+1}</span>
           <span class="plan-job-item">${escapeHtml(job.item)}</span>
-          <span class="plan-job-dates">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : ''}</span>
+          <span class="plan-job-dates">${jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : ''}</span>
         </div>
         <div class="plan-job-qty">จำนวน <b>${fmtNum(jp.qty)}</b></div>
       </div>
@@ -2138,7 +2223,7 @@ function renderPlanner(){
     const width = Math.max((r.days/span)*100, 1.2);
     const material = cleanMaterialDisplay(r.step.material || '') || 'ไม่มีข้อมูลวัตถุดิบ';
     const tip = `${r.step.dept} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน`
-      + (r.start_iso ? `\n${planFmtDate(r.start_iso)} → ${planFmtDate(r.end_iso)}` : '');
+      + (r.start_dt ? `\n${planFmtDateTime(r.start_dt)} → ${planFmtDateTime(r.end_dt)}` : '');
     return `<div class="plan-tl-row">
       <div class="plan-tl-name">${name}</div>
       <div class="plan-tl-track">
@@ -2170,7 +2255,7 @@ function renderPlanner(){
         ${extraNote}
         <li><b>อัตราการผลิต</b> — ค่ามัธยฐานของเป้าหมายที่บันทึกไว้ (ชิ้น/ชม.) หรืออัตราจริง = ผลิตได้จริงรวม ÷ ชั่วโมงเครื่องจักรรวม ตามฐานที่เลือกด้านบน</li>
         <li><b>เวลา</b> — ชั่วโมง = จำนวนชิ้น ÷ (อัตรา × จำนวนสถานี) นับเฉพาะเวลาเดินเครื่อง ไม่รวมเวลาตั้งเครื่อง รอของ หรือขนย้ายระหว่างขั้นตอน</li>
-        <li><b>วันที่</b> — แปลงจากชั่วโมงด้วยชั่วโมงทำงาน/วันที่กรอก และข้ามวันอาทิตย์ตามปฏิทินโรงงาน</li>
+        <li><b>วันที่และเวลา</b> — แปลงจากชั่วโมงด้วยชั่วโมงทำงาน/วันและเวลาเริ่มกะที่กรอก ข้ามวันอาทิตย์ตามปฏิทินโรงงาน แก้เวลาเริ่มของขั้นตอนไหนเองได้ในช่อง “ช่วงวันที่” ของตาราง เพื่อให้สอดคล้องกับความเป็นจริง (เช่น เริ่มช้ากว่าที่คำนวณไว้) ขั้นตอนถัดไปจะคำนวณต่อจากเวลานั้นให้อัตโนมัติ — กดปุ่ม ✕ เพื่อล้างค่าที่แก้เองแล้วกลับไปคำนวณต่อเนื่องตามปกติ</li>
         <li><b>ของเสีย</b> — เผื่อเป็น % เท่ากันทุกขั้นตอนตามที่กรอก ไล่ย้อนจากขั้นสุดท้ายขึ้นไป (ต้นสายจึงต้องขึ้นงานมากกว่าปลายสาย) ถ้าพิมพ์จำนวน “ต้องทำ” เองที่ขั้นตอนไหน จะยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไป</li>
         <li><b>ชื่อวัตถุดิบ</b> — ดึงจากบรรทัดล่าสุดของ Item นั้นในแต่ละขั้นตอน (Item เดียวกันอาจใช้วัตถุดิบต่างกันได้ตามงาน) ชี้ที่ชื่อเพื่อดูชื่อเต็ม</li>
         ${warnHtml}
@@ -2214,6 +2299,12 @@ function refreshPlanner(){
   document.getElementById('planPO').addEventListener('input', (e)=>{ planState.po = e.target.value; });
   start.addEventListener('change', (e)=>{
     planState.startIso = e.target.value || planTodayIso();
+    renderPlanner();
+  });
+  const shiftStart = document.getElementById('planShiftStart');
+  shiftStart.value = planState.shiftStart;
+  shiftStart.addEventListener('change', (e)=>{
+    planState.shiftStart = e.target.value || '08:00';
     renderPlanner();
   });
   document.getElementById('planRateBasis').addEventListener('change', (e)=>{
@@ -2306,6 +2397,16 @@ function refreshPlanner(){
       renderPlanner();
       return;
     }
+    // ปุ่ม ✕ ล้างเวลาเริ่มที่แก้เอง — กลับไปให้ระบบคำนวณต่อจากขั้นตอนก่อนหน้าอัตโนมัติ
+    const clearStart = e.target.closest('[data-clearstart]');
+    if(clearStart){
+      const job = planFindJob(parseInt(clearStart.getAttribute('data-job'), 10));
+      if(!job) return;
+      const dept = clearStart.getAttribute('data-clearstart');
+      if(job.overrides[dept]) job.overrides[dept].startAt = null;
+      renderPlanner();
+      return;
+    }
     const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
@@ -2325,10 +2426,16 @@ function refreshPlanner(){
     if(!inp) return;
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
     if(!job) return;
-    const v = parseFloat(inp.value);
     const dept = inp.getAttribute('data-dept');
     const field = inp.getAttribute('data-field');
     if(!job.overrides[dept]) job.overrides[dept] = {};
+    // เวลาเริ่มขั้นตอน (แก้เองให้สอดคล้องกับความเป็นจริง) เป็นข้อความวันที่-เวลา ไม่ใช่ตัวเลข
+    if(field === 'startAt'){
+      job.overrides[dept].startAt = inp.value || null;
+      renderPlanner();
+      return;
+    }
+    const v = parseFloat(inp.value);
     job.overrides[dept][field] = (isNaN(v) || v <= 0) ? null : v;
     renderPlanner();
   });
@@ -2483,6 +2590,14 @@ function getFiltered(){
 function fmtNum(n, digits=0){
   if(n===null||n===undefined||isNaN(n)) return '—';
   return Number(n).toLocaleString('en-US',{maximumFractionDigits:digits, minimumFractionDigits:digits});
+}
+/** ชั่วโมงทศนิยม -> "ชม:นาที" เช่น 7.42 -> "7:25" */
+function fmtHM(hours){
+  if(hours===null||hours===undefined||isNaN(hours)) return '—';
+  const totalMin = Math.round(hours*60);
+  const h = Math.floor(totalMin/60);
+  const m = totalMin % 60;
+  return h + ':' + String(m).padStart(2,'0');
 }
 function fmtBaht(n){
   if(n===null||n===undefined||isNaN(n)) return '—';
