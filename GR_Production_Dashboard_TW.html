@@ -1599,9 +1599,39 @@ function planAddWorkingDays(iso, days){
 }
 
 /**
- * จัดอันดับหน่วยงานว่าอยู่ต้นสายหรือปลายสาย จากวันที่บันทึกงานครั้งแรกของแต่ละ
- * ใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้
- * บอกอะไรเรื่องลำดับ จึงข้ามไป
+ * ลำดับขั้นตอนมาตรฐานของสายผลิต — ยืนยันจากหน้างาน (ส.ค. 2026)
+ * ชีตไม่มีคอลัมน์ step order จึงต้องเก็บลำดับไว้ที่นี่ ถ้าสายผลิตเปลี่ยน แก้ที่ลิสต์นี้ที่เดียว
+ */
+const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตัดยาง','ทากาว','เจียร์','เจียร์(หยาบ)','เจียร์(ละเอียด)','เจาะ'];
+
+// ขั้นตอนที่ไม่ได้ผ่านทุกงาน — ทำเฉพาะบอลบางไซส์
+const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
+
+/**
+ * ตำแหน่งของหน่วยงานในสายผลิต (1 = ต้นสาย)
+ *   standard = ตรงกับลำดับมาตรฐาน
+ *   variant  = ชื่อแตกย่อย เช่น "ตัดยาง(เข้ามุม)" — วางต่อท้ายขั้นตอนหลักที่ชื่อขึ้นต้นเหมือนกัน
+ *   data     = ไม่อยู่ในลำดับมาตรฐานเลย ต้องเดาจากข้อมูลย้อนหลัง (ติดป้ายเตือนไว้ในตาราง)
+ */
+function standardStepRank(dept){
+  const exact = STEP_ORDER.indexOf(dept);
+  if(exact !== -1) return {rank: exact + 1, src: 'standard'};
+
+  let base = -1, baseLen = 0;
+  STEP_ORDER.forEach((s,i)=>{
+    if(dept.indexOf(s) === 0 && s.length > baseLen){ base = i; baseLen = s.length; }
+  });
+  if(base !== -1) return {rank: base + 1.5, src: 'variant'};
+
+  const g = globalStepRank[dept];
+  if(g != null) return {rank: 1 + g*(STEP_ORDER.length - 1), src: 'data'};
+  return {rank: STEP_ORDER.length + 1, src: 'none'};
+}
+
+/**
+ * ตัวสำรองสำหรับหน่วยงานที่ไม่อยู่ใน STEP_ORDER: จัดอันดับว่าอยู่ต้นสายหรือปลายสาย
+ * จากวันที่บันทึกงานครั้งแรกของแต่ละใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย
+ * ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้บอกอะไรเรื่องลำดับ จึงข้ามไป
  */
 function buildStepRank(rows){
   const groups = new Map();
@@ -1650,7 +1680,6 @@ function buildPlanSteps(item){
     if((r.date_iso||'') > s.last) s.last = r.date_iso || '';
   });
 
-  const itemRank = buildStepRank(rows);
   const steps = [...byDept.values()];
   steps.forEach(s=>{
     s.rate_target_95 = planMedian(s.t95);
@@ -1658,9 +1687,9 @@ function buildPlanSteps(item){
     s.rate_actual = s.hours > 0 ? s.actual / s.hours : null;
     s.cost_per_pc = planMedian(s.cost);
     s.defect_pct = (s.actual + s.defects) > 0 ? (s.defects/(s.actual + s.defects))*100 : 0;
-    if(itemRank[s.dept] != null){ s.rank = itemRank[s.dept]; s.rank_src = 'item'; }
-    else if(globalStepRank[s.dept] != null){ s.rank = globalStepRank[s.dept]; s.rank_src = 'global'; }
-    else { s.rank = 0.5; s.rank_src = 'none'; }
+    const rank = standardStepRank(s.dept);
+    s.rank = rank.rank;
+    s.rank_src = rank.src;
   });
   steps.sort((a,b)=> a.rank - b.rank || a.dept.localeCompare(b.dept));
 
@@ -1752,6 +1781,8 @@ function computePlan(){
   };
 }
 
+const PLAN_RANK_LABEL = {standard:'· 標準順序', variant:'· 接續主站別', data:'· 依資料推估', none:'· 順序未知'};
+
 const PLAN_RATE_SRC_LABEL = {
   rate_target_95: '取自目標 95%',
   rate_target_100: '取自目標 100%',
@@ -1809,7 +1840,7 @@ function renderPlanner(){
           <button class="plan-move" data-move="down" data-idx="${i}" title="下移" ${i===plan.rows.length-1?'disabled':''}>▼</button>
         </div>
       </td>
-      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span></td>
+      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">僅部分尺寸的球</div>' : ''}</td>
       <td class="num">
         <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
@@ -1822,7 +1853,7 @@ function renderPlanner(){
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
       <td class="num mono">${r.cost != null ? fmtNum(r.cost,0) : '—'}</td>
-      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'item' ? '' : 'guess'}">${r.step.rank_src === 'item' ? '· 依本 Item' : '· 全部平均'}</div></td>
+      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' || r.step.rank_src === 'variant' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || PLAN_RANK_LABEL.none}</div></td>
     </tr>`;
   }).join('');
 
@@ -1888,7 +1919,7 @@ function renderPlanner(){
       <h2>計算所用之假設</h2>
       <div class="panel-note">所有數字皆為依歷史資料所做的概估，並非已確認的生產計畫</div>
       <ul>
-        <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改以該 Item 各製令中實際記錄的日期推得順序；若歷史資料不足則採全部 Item 的平均順序 — 可用 ▲▼ 自行調整</li>
+        <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改用產線標準順序：壓延 → 沖壓 → 砂紙 → 裁膠 → 上膠 → 研磨 → 研磨(粗) → 研磨(細) → 鑽孔；不在此順序中的部門則依歷史資料推估位置並加註標示 — 可用 ▲▼ 自行調整</li>
         <li><b>生產速率</b> — 取歷史目標值的中位數（件/小時），或實際速率＝實際產量合計 ÷ 機台工時合計，依上方所選基準</li>
         <li><b>工時</b> — 工時＝數量 ÷（速率 × 機台數），僅計機台運轉時間，不含換模、待料與站間搬運</li>
         <li><b>日期</b> — 依所填每日工時換算，並依工廠行事曆跳過週日</li>

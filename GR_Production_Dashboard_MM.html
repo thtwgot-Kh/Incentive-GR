@@ -1601,9 +1601,39 @@ function planAddWorkingDays(iso, days){
 }
 
 /**
- * จัดอันดับหน่วยงานว่าอยู่ต้นสายหรือปลายสาย จากวันที่บันทึกงานครั้งแรกของแต่ละ
- * ใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้
- * บอกอะไรเรื่องลำดับ จึงข้ามไป
+ * ลำดับขั้นตอนมาตรฐานของสายผลิต — ยืนยันจากหน้างาน (ส.ค. 2026)
+ * ชีตไม่มีคอลัมน์ step order จึงต้องเก็บลำดับไว้ที่นี่ ถ้าสายผลิตเปลี่ยน แก้ที่ลิสต์นี้ที่เดียว
+ */
+const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตัดยาง','ทากาว','เจียร์','เจียร์(หยาบ)','เจียร์(ละเอียด)','เจาะ'];
+
+// ขั้นตอนที่ไม่ได้ผ่านทุกงาน — ทำเฉพาะบอลบางไซส์
+const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
+
+/**
+ * ตำแหน่งของหน่วยงานในสายผลิต (1 = ต้นสาย)
+ *   standard = ตรงกับลำดับมาตรฐาน
+ *   variant  = ชื่อแตกย่อย เช่น "ตัดยาง(เข้ามุม)" — วางต่อท้ายขั้นตอนหลักที่ชื่อขึ้นต้นเหมือนกัน
+ *   data     = ไม่อยู่ในลำดับมาตรฐานเลย ต้องเดาจากข้อมูลย้อนหลัง (ติดป้ายเตือนไว้ในตาราง)
+ */
+function standardStepRank(dept){
+  const exact = STEP_ORDER.indexOf(dept);
+  if(exact !== -1) return {rank: exact + 1, src: 'standard'};
+
+  let base = -1, baseLen = 0;
+  STEP_ORDER.forEach((s,i)=>{
+    if(dept.indexOf(s) === 0 && s.length > baseLen){ base = i; baseLen = s.length; }
+  });
+  if(base !== -1) return {rank: base + 1.5, src: 'variant'};
+
+  const g = globalStepRank[dept];
+  if(g != null) return {rank: 1 + g*(STEP_ORDER.length - 1), src: 'data'};
+  return {rank: STEP_ORDER.length + 1, src: 'none'};
+}
+
+/**
+ * ตัวสำรองสำหรับหน่วยงานที่ไม่อยู่ใน STEP_ORDER: จัดอันดับว่าอยู่ต้นสายหรือปลายสาย
+ * จากวันที่บันทึกงานครั้งแรกของแต่ละใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย
+ * ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้บอกอะไรเรื่องลำดับ จึงข้ามไป
  */
 function buildStepRank(rows){
   const groups = new Map();
@@ -1652,7 +1682,6 @@ function buildPlanSteps(item){
     if((r.date_iso||'') > s.last) s.last = r.date_iso || '';
   });
 
-  const itemRank = buildStepRank(rows);
   const steps = [...byDept.values()];
   steps.forEach(s=>{
     s.rate_target_95 = planMedian(s.t95);
@@ -1660,9 +1689,9 @@ function buildPlanSteps(item){
     s.rate_actual = s.hours > 0 ? s.actual / s.hours : null;
     s.cost_per_pc = planMedian(s.cost);
     s.defect_pct = (s.actual + s.defects) > 0 ? (s.defects/(s.actual + s.defects))*100 : 0;
-    if(itemRank[s.dept] != null){ s.rank = itemRank[s.dept]; s.rank_src = 'item'; }
-    else if(globalStepRank[s.dept] != null){ s.rank = globalStepRank[s.dept]; s.rank_src = 'global'; }
-    else { s.rank = 0.5; s.rank_src = 'none'; }
+    const rank = standardStepRank(s.dept);
+    s.rank = rank.rank;
+    s.rank_src = rank.src;
   });
   steps.sort((a,b)=> a.rank - b.rank || a.dept.localeCompare(b.dept));
 
@@ -1754,6 +1783,8 @@ function computePlan(){
   };
 }
 
+const PLAN_RANK_LABEL = {standard:'· စံအစဉ်', variant:'· ပင်မအဆင့်နောက်', data:'· မှတ်တမ်းမှ ခန့်မှန်း', none:'· အစဉ် မသိ'};
+
 const PLAN_RATE_SRC_LABEL = {
   rate_target_95: 'ပန်းတိုင် 95% မှ',
   rate_target_100: 'ပန်းတိုင် 100% မှ',
@@ -1811,7 +1842,7 @@ function renderPlanner(){
           <button class="plan-move" data-move="down" data-idx="${i}" title="အောက်ချရန်" ${i===plan.rows.length-1?'disabled':''}>▼</button>
         </div>
       </td>
-      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span></td>
+      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">ဘောလုံး အချို့ဆိုက်သာ</div>' : ''}</td>
       <td class="num">
         <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
@@ -1824,7 +1855,7 @@ function renderPlanner(){
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
       <td class="num mono">${r.cost != null ? fmtNum(r.cost,0) : '—'}</td>
-      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'item' ? '' : 'guess'}">${r.step.rank_src === 'item' ? '· ဤ Item မှ' : '· ပျမ်းမျှအစဉ်'}</div></td>
+      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' || r.step.rank_src === 'variant' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || PLAN_RANK_LABEL.none}</div></td>
     </tr>`;
   }).join('');
 
@@ -1890,7 +1921,7 @@ function renderPlanner(){
       <h2>တွက်ချက်ရာတွင် သုံးသော ယူဆချက်များ</h2>
       <div class="panel-note">ကိန်းဂဏန်းအားလုံးမှာ မှတ်တမ်းမှ ခန့်မှန်းချက်ဖြစ်ပြီး အတည်ပြုပြီး ထုတ်လုပ်မှုအစီအစဉ် မဟုတ်ပါ</div>
       <ul>
-        <li><b>အဆင့်အစဉ်</b> — Sheet တွင် အဆင့်အစဉ် (step order) ကော်လံ မရှိသဖြင့် ထို Item ၏ အလုပ်တွဲစဉ်များတွင် မှတ်တမ်းတင်သည့်ရက်အလိုက် စီပေးထားသည်။ မှတ်တမ်းမလုံလောက်ပါက Item အားလုံး၏ ပျမ်းမျှအစဉ်ကို သုံးသည် — ▲▼ ဖြင့် ပြင်နိုင်သည်</li>
+        <li><b>အဆင့်အစဉ်</b> — Sheet တွင် အဆင့်အစဉ် (step order) ကော်လံ မရှိသဖြင့် စက်ရုံ၏ စံအစဉ်ကို သုံးသည်: နယ်ခြင်း → ဖိနှိပ်ခြင်း → သဲစက္ကူ → ရာဘာဖြတ်ခြင်း → ကော်သုတ်ခြင်း → တိုက်ချွတ်ခြင်း → တိုက်ချွတ်ခြင်း(ရိုင်း) → တိုက်ချွတ်ခြင်း(သေချာ) → အပေါက်ဖောက်ခြင်း။ ဤအစဉ်တွင် မပါသော ဌာနများကို မှတ်တမ်းမှ ခန့်မှန်းပြီး အမှတ်အသားပြထားသည် — ▲▼ ဖြင့် ပြင်နိုင်သည်</li>
         <li><b>ထုတ်လုပ်နှုန်း</b> — မှတ်တမ်းရှိ ပန်းတိုင်၏ အလယ်တန်ဖိုး (ခု/နာရီ) သို့မဟုတ် အမှန်နှုန်း = စုစုပေါင်းထုတ်လုပ်မှု ÷ စုစုပေါင်းစက်ချိန် (အပေါ်တွင် ရွေးထားသည့်အတိုင်း)</li>
         <li><b>အချိန်</b> — နာရီ = အရေအတွက် ÷ (နှုန်း × စက်အလုံးရေ)။ စက်မောင်းချိန်သာ တွက်ထားပြီး စက်ပြင်ဆင်ချိန်၊ စောင့်ဆိုင်းချိန်နှင့် အဆင့်ချင်းသယ်ယူချိန် မပါဝင်ပါ</li>
         <li><b>ရက်စွဲ</b> — ထည့်ထားသော အလုပ်ချိန်နာရီ/ရက် ဖြင့် ပြောင်းထားပြီး စက်ရုံပြက္ခဒိန်အရ တနင်္ဂနွေကို ကျော်သည်</li>
