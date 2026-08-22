@@ -561,6 +561,25 @@
     background:var(--bg-2);color:var(--text-dim);font-size:11.5px;letter-spacing:.02em;
     border-top:1px solid var(--border);
   }
+  /* แถวกรอกรายการ Item */
+  .plan-items-panel{margin-bottom:20px;}
+  .plan-rows{display:flex;flex-direction:column;gap:8px;}
+  .plan-row{display:grid;grid-template-columns:34px 1fr 150px auto;gap:10px;align-items:center;}
+  .plan-row.head{padding-bottom:2px;}
+  .plan-row.head span{
+    font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);
+  }
+  .plan-row-no{font-family:var(--mono);font-size:12px;color:var(--text-faint);}
+  .plan-row-item.invalid{border-color:var(--bad);}
+  .plan-row-tools{display:flex;align-items:center;gap:6px;}
+  .plan-row-hint{grid-column:2 / -1;font-size:11px;color:var(--bad);margin-top:-4px;}
+  .plan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  .plan-calc-btn{font-weight:600;}
+  .plan-stale{
+    background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);
+    border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:16px;
+  }
+
   /* Item card */
   .plan-job{margin-bottom:16px;}
   .plan-job-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
@@ -690,7 +709,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>GR · PRODUCTION PLANNER</div>
         <h1>生產排程計算</h1>
-        <div class="subtitle">填入客戶名稱與製令編號，再逐筆加入要生產的 Item，系統會依歷史實際生產速率逐站計算工時與日期 — 速率、並行機台數、應投入數量、站別順序與 Item 順序皆可自行調整</div>
+        <div class="subtitle">填入客戶名稱與製令編號，再逐筆填入要生產的 Item，按「計算生產時間」後系統會依歷史實際生產速率逐站計算工時與日期 — 速率、並行機台數、應投入數量、站別順序與 Item 順序皆可自行調整</div>
       </div>
       <div class="meta-chip">排程內 Item <b id="planJobCount">0</b> 筆</div>
     </header>
@@ -727,22 +746,14 @@
       </div>
     </div>
 
-    <div class="prod-search-bar plan-add-bar">
-      <div class="filter-group ss-group" style="flex:1.6;min-width:220px;">
-        <span class="filter-label">Item 代碼</span>
-        <div class="ss-control" id="ssPlanItemControl">
-          <input type="text" id="planSearchItem" class="search-box" placeholder="搜尋 / 選擇 Item 代碼..." autocomplete="off">
-          <button class="ss-clear" id="ssPlanItemClear" title="清除" type="button">✕</button>
-        </div>
-        <div class="filter-panel ss-panel" id="ssPlanItemPanel"></div>
-      </div>
-      <div class="filter-group">
-        <span class="filter-label">需生產數量（件）</span>
-        <input type="number" id="planQty" class="search-box plan-num" min="1" step="1" value="1000">
-      </div>
-      <div class="filter-group">
-        <span class="filter-label">&nbsp;</span>
-        <button class="connect-btn plan-add-btn" id="planAddBtn">＋ 加入排程</button>
+    <div class="panel plan-items-panel">
+      <h2>待生產 Item 清單</h2>
+      <div class="panel-note">填入 Item 代碼與數量 — 按「＋ 新增 Item」可再加一格，用 ▲▼ 調整上線順序，最後按「計算生產時間」</div>
+      <div class="plan-rows" id="planItemRows"></div>
+      <datalist id="planItemList"></datalist>
+      <div class="plan-actions">
+        <button class="connect-btn ghost" id="planAddBtn">＋ 新增 Item</button>
+        <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ 計算生產時間</button>
       </div>
     </div>
 
@@ -1617,7 +1628,9 @@ const planState = {
   startIso: '',
   scrapPct: 0,
   rateBasis: 'target_95',
-  jobs: []   // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
+  jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: dept -> {rate, stations, qty}
+  computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
+  dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
 };
 let planJobUid = 0;
 
@@ -1715,18 +1728,54 @@ function buildPlanSteps(item, userOrder){
 
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
 
-function planAddJob(item, qty){
-  if(!item) return false;
-  planState.jobs.push({
-    uid: ++planJobUid,
-    item: item,
-    qty: qty > 0 ? qty : 1,
-    steps: buildPlanSteps(item, []),
-    order: [],
-    overrides: {}
-  });
+function planNewJob(){
+  return {uid: ++planJobUid, item:'', qty: 1000, steps: [], order: [], overrides: {}};
+}
+/** เฉพาะแถวที่กรอกรหัสถูกต้องและมีขั้นตอนให้คำนวณ */
+function planValidJobs(){ return planState.jobs.filter(j=> j.item && j.steps.length); }
+
+/** ปุ่ม "เพิ่ม Item" — เพิ่มกล่องกรอกอีกหนึ่งแถว */
+function planAddRow(){
+  planState.jobs.push(planNewJob());
+  if(planState.computed) planState.dirty = true;
+  renderPlanRows();
   renderPlanner();
-  return true;
+}
+
+/** ปุ่ม "คำนวณเวลาในการผลิต" — อ่านทุกแถวแล้วสร้างผลลัพธ์ */
+function planCompute(){
+  const options = planItemOptions();
+  planState.jobs.forEach(j=>{
+    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+  });
+  planState.computed = planValidJobs().length > 0;
+  planState.dirty = false;
+  renderPlanRows();
+  renderPlanner();
+}
+
+/** กล่องกรอกรายการ Item — แถวละหนึ่ง Item พร้อมจำนวนและปุ่มจัดลำดับ */
+function renderPlanRows(){
+  const box = document.getElementById('planItemRows');
+  if(!box) return;
+  if(!planState.jobs.length) planState.jobs.push(planNewJob());
+  const options = planItemOptions();
+  box.innerHTML = `<div class="plan-row head"><span></span><span>Item 代碼</span><span>數量（件）</span><span></span></div>`
+    + planState.jobs.map((job,i)=>{
+    const bad = job.item && !options.includes(job.item);
+    return `<div class="plan-row">
+      <div class="plan-row-no">#${i+1}</div>
+      <input class="search-box plan-row-item${bad ? ' invalid' : ''}" list="planItemList" data-job="${job.uid}" data-rowfield="item"
+             value="${escapeHtml(job.item).replace(/"/g,'&quot;')}" placeholder="搜尋 / 選擇 Item 代碼..." autocomplete="off">
+      <input class="search-box plan-num" type="number" min="1" step="1" data-job="${job.uid}" data-rowfield="qty" value="${job.qty}">
+      <div class="plan-row-tools">
+        <button class="plan-move" data-jobmove="up" data-job="${job.uid}" title="Item 上移" ${i===0?'disabled':''}>▲</button>
+        <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="Item 下移" ${i===planState.jobs.length-1?'disabled':''}>▼</button>
+        <button class="plan-move plan-del" data-jobdel="${job.uid}" title="從清單移除此 Item" ${planState.jobs.length===1?'disabled':''}>✕</button>
+      </div>
+      ${bad ? `<div class="plan-row-hint">歷史資料中查無此代碼 — 請從下拉清單中選擇</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 /** อัตราการผลิตที่จะใช้คำนวณของขั้นตอนหนึ่ง (ชิ้น/ชม.) ตามฐานที่เลือก */
@@ -1758,7 +1807,7 @@ function computePlan(){
   const startIso = planState.startIso || planTodayIso();
 
   let cum = 0;
-  const jobs = planState.jobs.map(job=>{
+  const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
     const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
     const extra = job.steps.filter(s=> s.rank == null).map(s=>({step:s}));
@@ -1857,13 +1906,16 @@ function renderPlanner(){
   const box = document.getElementById('planResult');
   const countEl = document.getElementById('planJobCount');
   if(!box) return;
-  countEl.textContent = String(planState.jobs.length);
+  // นับเฉพาะแถวที่รหัสถูกต้อง แถวที่พิมพ์ผิดยังไม่ถือว่าอยู่ในแผน
+  const validCodes = planItemOptions();
+  countEl.textContent = String(planState.jobs.filter(j=> j.item && validCodes.includes(j.item)).length);
 
-  if(!planState.jobs.length){
-    box.innerHTML = `<div class="panel plan-empty">排程中尚無 Item — 請於上方選擇 Item 代碼、填入數量，再按「＋ 加入排程」<br>同一張製令可加入多筆 Item，並可調整上線順序</div>`;
+  if(!planState.computed || !planValidJobs().length){
+    box.innerHTML = `<div class="panel plan-empty">請於上方填入 Item 代碼與數量，再按「計算生產時間」<br>同一張製令可加入多筆 Item，並可調整上線順序</div>`;
     return;
   }
 
+  const staleHtml = planState.dirty ? `<div class="plan-stale">上次計算後 Item 清單已變更 — 請再按一次「計算生產時間」以更新結果</div>` : '';
   const plan = computePlan();
   const split = plan.hasExtra;
 
@@ -1954,14 +2006,7 @@ function renderPlanner(){
           <span class="plan-job-item">${escapeHtml(job.item)}</span>
           <span class="plan-job-dates">${jp.start_iso ? planFmtDate(jp.start_iso) + ' → ' + planFmtDate(jp.end_iso) : ''}</span>
         </div>
-        <div class="plan-job-tools">
-          <label class="plan-job-qty">數量（件）
-            <input class="plan-cell-input" type="number" min="1" step="1" data-jobfield="qty" data-job="${job.uid}" value="${job.qty}">
-          </label>
-          <button class="plan-move" data-jobmove="up" data-job="${job.uid}" title="Item 上移" ${i===0?'disabled':''}>▲</button>
-          <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="Item 下移" ${i===plan.jobs.length-1?'disabled':''}>▼</button>
-          <button class="plan-move plan-del" data-jobdel="${job.uid}" title="從排程移除此 Item">✕</button>
-        </div>
+        <div class="plan-job-qty">數量 <b>${fmtNum(jp.qty)}</b></div>
       </div>
       ${noSteps ? `<div class="plan-empty">此 Item 在歷史資料中尚無標示部門的紀錄，因此無法計算生產站別</div>` : `
       <div class="table-wrap">
@@ -2022,7 +2067,7 @@ function renderPlanner(){
       <h2>計算所用之假設</h2>
       <div class="panel-note">所有數字皆為依歷史資料所做的概估，並非已確認的生產計畫</div>
       <ul>
-        <li><b>Item 順序</b> — Item 依排程順序接續生產（前一筆完成後下一筆才開始），可用卡片標題上的 ▲▼ 調整順序</li>
+        <li><b>Item 順序</b> — Item 依排程順序接續生產（前一筆完成後下一筆才開始），可用上方 Item 清單的 ▲▼ 調整順序後再按一次計算</li>
         <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改用主線標準順序：壓延 → 沖壓 → 砂紙 → 裁膠 → 上膠 → 研磨 → 研磨(粗) → 研磨(細) → 鑽孔；其中研磨(粗)/(細) 僅部分尺寸的球需要 — 可用 ▲▼ 自行調整</li>
         ${extraNote}
         <li><b>生產速率</b> — 取歷史目標值的中位數（件/小時），或實際速率＝實際產量合計 ÷ 機台工時合計，依上方所選基準</li>
@@ -2034,24 +2079,23 @@ function renderPlanner(){
       </ul>
     </div>`;
 
-  box.innerHTML = kpiHtml + jobsHtml + timelineHtml + assumeHtml;
+  box.innerHTML = staleHtml + kpiHtml + jobsHtml + timelineHtml + assumeHtml;
 }
 
 /** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
 function refreshPlanner(){
   const options = planItemOptions();
-  planState.jobs = planState.jobs.filter(j=> options.includes(j.item));
-  planState.jobs.forEach(j=>{ j.steps = buildPlanSteps(j.item, j.order); });
-  const list = document.getElementById('planCustomerList');
-  if(list) list.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
+  planState.jobs.forEach(j=>{
+    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+  });
+  if(planState.computed && !planValidJobs().length) planState.computed = false;
+  const itemList = document.getElementById('planItemList');
+  if(itemList) itemList.innerHTML = options.map(i=>`<option value="${escapeHtml(i).replace(/"/g,'&quot;')}"></option>`).join('');
+  const custList = document.getElementById('planCustomerList');
+  if(custList) custList.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
+  renderPlanRows();
   renderPlanner();
 }
-
-setupSearchableSelect({
-  inputId:'planSearchItem', panelId:'ssPlanItemPanel', clearId:'ssPlanItemClear', stateKey:'itemQuery',
-  stateObj: planState, onChange: ()=>{},
-  getOptions: planItemOptions
-});
 
 (function initPlannerControls(){
   const start = document.getElementById('planStartDate');
@@ -2079,42 +2123,60 @@ setupSearchableSelect({
     renderPlanner();
   });
 
-  // เพิ่ม Item เข้าแผน — รับเฉพาะรหัสที่มีอยู่จริงในข้อมูล
-  const itemInput = document.getElementById('planSearchItem');
-  const qtyInput = document.getElementById('planQty');
-  function addFromBar(){
-    const raw = (itemInput.value || '').trim().toLowerCase();
-    const match = planItemOptions().find(i => i.toLowerCase() === raw);
-    if(!match){ itemInput.focus(); return; }
-    planAddJob(match, parseFloat(qtyInput.value) || 1);
-    itemInput.value = '';
-    planState.itemQuery = '';
-    document.getElementById('ssPlanItemClear').classList.remove('show');
-  }
-  document.getElementById('planAddBtn').addEventListener('click', addFromBar);
-  itemInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') addFromBar(); });
+  document.getElementById('planAddBtn').addEventListener('click', planAddRow);
+  document.getElementById('planCalcBtn').addEventListener('click', planCompute);
 
-  // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
-  const box = document.getElementById('planResult');
-  box.addEventListener('click', (e)=>{
+  // กล่องรายการ Item — แก้รหัส/จำนวน จัดลำดับ และลบแถว
+  const rowBox = document.getElementById('planItemRows');
+  rowBox.addEventListener('click', (e)=>{
     const del = e.target.closest('[data-jobdel]');
     if(del){
       const uid = parseInt(del.getAttribute('data-jobdel'), 10);
       planState.jobs = planState.jobs.filter(j=> j.uid !== uid);
+      if(!planState.jobs.length) planState.jobs.push(planNewJob());
+      if(planState.computed) planState.dirty = true;
+      renderPlanRows();
       renderPlanner();
       return;
     }
-    const jobMove = e.target.closest('[data-jobmove]');
-    if(jobMove){
-      const uid = parseInt(jobMove.getAttribute('data-job'), 10);
-      const i = planState.jobs.findIndex(j=> j.uid === uid);
-      const j2 = jobMove.getAttribute('data-jobmove') === 'up' ? i-1 : i+1;
-      if(i === -1 || j2 < 0 || j2 >= planState.jobs.length) return;
-      const list = planState.jobs;
-      [list[i], list[j2]] = [list[j2], list[i]];
-      renderPlanner();
-      return;
+    const move = e.target.closest('[data-jobmove]');
+    if(!move) return;
+    const uid = parseInt(move.getAttribute('data-job'), 10);
+    const i = planState.jobs.findIndex(j=> j.uid === uid);
+    const k = move.getAttribute('data-jobmove') === 'up' ? i-1 : i+1;
+    if(i === -1 || k < 0 || k >= planState.jobs.length) return;
+    const list = planState.jobs;
+    [list[i], list[k]] = [list[k], list[i]];
+    if(planState.computed) planState.dirty = true;
+    renderPlanRows();
+    renderPlanner();
+  });
+  // ใช้ change ไม่ใช่ input — แถวถูกวาดใหม่หลังแก้ค่า ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
+  rowBox.addEventListener('change', (e)=>{
+    const inp = e.target.closest('[data-rowfield]');
+    if(!inp) return;
+    const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
+    if(!job) return;
+    if(inp.getAttribute('data-rowfield') === 'item'){
+      const raw = (inp.value || '').trim();
+      const match = planItemOptions().find(i => i.toLowerCase() === raw.toLowerCase());
+      job.item = match || raw;
+      // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับไว้ของเดิมจึงใช้ไม่ได้
+      job.steps = match ? buildPlanSteps(match, []) : [];
+      job.order = [];
+      job.overrides = {};
+    }else{
+      const v = parseFloat(inp.value);
+      job.qty = (isNaN(v) || v <= 0) ? 1 : v;
     }
+    if(planState.computed) planState.dirty = true;
+    renderPlanRows();
+    renderPlanner();
+  });
+
+  // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
+  const box = document.getElementById('planResult');
+  box.addEventListener('click', (e)=>{
     const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
@@ -2135,11 +2197,6 @@ setupSearchableSelect({
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
     if(!job) return;
     const v = parseFloat(inp.value);
-    if(inp.hasAttribute('data-jobfield')){
-      job.qty = (isNaN(v) || v <= 0) ? 1 : v;
-      renderPlanner();
-      return;
-    }
     const dept = inp.getAttribute('data-dept');
     const field = inp.getAttribute('data-field');
     if(!job.overrides[dept]) job.overrides[dept] = {};
