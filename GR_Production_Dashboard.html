@@ -606,6 +606,10 @@
   }
   .plan-empty{padding:50px;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.9;}
   .plan-assume{margin-top:16px;}
+  /* เพิ่มขั้นตอนเอง (Item ใหม่ที่ยังไม่มีข้อมูลย้อนหลัง) */
+  .plan-manual-add{display:flex;gap:8px;align-items:center;margin-top:12px;}
+  .plan-manual-dept-input{flex:1;max-width:320px;}
+  .plan-del-step{margin-left:6px;}
   .plan-assume ul{margin:0;padding-left:18px;color:var(--text-dim);font-size:12px;line-height:1.9;}
   .plan-assume b{color:var(--text);}
   .plan-warn{color:var(--warn);}
@@ -1541,9 +1545,25 @@ function planItemOptions(){
   return [...new Set(RAW.filter(r=> r.item_code && r.dept).map(r=>r.item_code))].sort();
 }
 
-/** สรุปสถิติย้อนหลังของ Item หนึ่ง แยกตามขั้นตอน (หน่วยงาน) */
-function buildPlanSteps(item, userOrder){
-  const rows = RAW.filter(r=> (r.item_code||'') === item && r.dept);
+/** โครงขั้นตอนเปล่าสำหรับ Item ใหม่ที่ยังไม่มีข้อมูลย้อนหลัง — ผู้ใช้กรอกอัตราเอง */
+function planManualStepShell(dept){
+  const rank = standardStepRank(dept);
+  return {
+    dept, n: 0, actual: 0, hours: 0, t95: [], t100: [], material: '', material_date: '',
+    rate_target_95: null, rate_target_100: null, rate_actual: null,
+    rank: rank.rank, rank_src: 'manual'
+  };
+}
+
+/** รายชื่อหน่วยงานให้เลือกตอนเพิ่มขั้นตอนเอง — สายหลักก่อน แล้วตามด้วยหน่วยงานอื่นที่เคยเจอในข้อมูล */
+function planDeptOptions(){
+  return [...new Set([...STEP_ORDER, ...allDepts])];
+}
+
+/** สรุปสถิติย้อนหลังของ Item หนึ่ง แยกตามขั้นตอน (หน่วยงาน)
+ *  manualDepts = รายชื่อหน่วยงานที่ผู้ใช้เพิ่มเอง (สำหรับ Item ที่ไม่มี/ไม่ครบข้อมูลย้อนหลัง) */
+function buildPlanSteps(item, userOrder, manualDepts){
+  const rows = item ? RAW.filter(r=> (r.item_code||'') === item && r.dept) : [];
   const byDept = new Map();
   rows.forEach(r=>{
     let s = byDept.get(r.dept);
@@ -1568,6 +1588,12 @@ function buildPlanSteps(item, userOrder){
     const rank = standardStepRank(s.dept);
     s.rank = rank.rank;
     s.rank_src = rank.src;
+  });
+
+  // เติมขั้นตอนที่ผู้ใช้เพิ่มเอง — ข้ามหน่วยงานที่มีข้อมูลย้อนหลังจริงอยู่แล้ว
+  (manualDepts || []).forEach(dept=>{
+    if(byDept.has(dept)) return;
+    steps.push(planManualStepShell(dept));
   });
 
   // สายหลักเรียงตาม STEP_ORDER ส่วนขั้นตอนแยกไปต่อท้าย เรียงตามชื่อ
@@ -1596,10 +1622,11 @@ function buildPlanSteps(item, userOrder){
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
 
 function planNewJob(){
-  return {uid: ++planJobUid, item:'', qty: 1000, steps: [], order: [], overrides: {}};
+  return {uid: ++planJobUid, item:'', qty: 1000, steps: [], order: [], overrides: {}, manualSteps: []};
 }
-/** เฉพาะแถวที่กรอกรหัสถูกต้องและมีขั้นตอนให้คำนวณ */
-function planValidJobs(){ return planState.jobs.filter(j=> j.item && j.steps.length); }
+/** เฉพาะแถวที่กรอกรหัส Item ไว้ — รวมถึง Item ใหม่ที่ยังไม่มีขั้นตอนจากประวัติ
+ *  แต่มีขั้นตอนที่เพิ่มเองรออยู่ (หรือรอเพิ่ม) ก็ยังนับเป็นรายการในแผน */
+function planValidJobs(){ return planState.jobs.filter(j=> j.item); }
 
 /** ปุ่ม "เพิ่ม Item" — เพิ่มกล่องกรอกอีกหนึ่งแถว */
 function planAddRow(){
@@ -1611,9 +1638,8 @@ function planAddRow(){
 
 /** ปุ่ม "คำนวณเวลาในการผลิต" — อ่านทุกแถวแล้วสร้างผลลัพธ์ */
 function planCompute(){
-  const options = planItemOptions();
   planState.jobs.forEach(j=>{
-    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+    j.steps = j.item ? buildPlanSteps(j.item, j.order, j.manualSteps) : [];
   });
   planState.computed = planValidJobs().length > 0;
   planState.dirty = false;
@@ -1640,7 +1666,7 @@ function renderPlanRows(){
         <button class="plan-move" data-jobmove="down" data-job="${job.uid}" title="เลื่อน Item ลง" ${i===planState.jobs.length-1?'disabled':''}>▼</button>
         <button class="plan-move plan-del" data-jobdel="${job.uid}" title="เอา Item ออกจากแผน" ${planState.jobs.length===1?'disabled':''}>✕</button>
       </div>
-      ${bad ? `<div class="plan-row-hint">ไม่พบรหัสนี้ในข้อมูลย้อนหลัง — เลือกจากรายการที่ขึ้นให้เลือก</div>` : ''}
+      ${bad ? `<div class="plan-row-hint">ไม่พบรหัสนี้ในข้อมูลย้อนหลัง — เลือกจากรายการที่ขึ้นให้เลือก หรือถ้าเป็น Item ใหม่ กด “คำนวณ” แล้วเพิ่มขั้นตอนเองได้ในผลลัพธ์ด้านล่าง</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1767,7 +1793,7 @@ const PLAN_RATE_SRC_LABEL = {
   rate_actual: 'จากอัตราจริง',
   manual: 'แก้เอง'
 };
-const PLAN_RANK_LABEL = {standard:'· ลำดับมาตรฐาน', standalone:'· ขั้นตอนแยก'};
+const PLAN_RANK_LABEL = {standard:'· ลำดับมาตรฐาน', standalone:'· ขั้นตอนแยก', manual:'· เพิ่มเอง'};
 
 // ---------- Production planner: Export เป็น Excel (.xlsx) ----------
 // สร้างไฟล์ .xlsx จริงแบบไม่พึ่งไลบรารีภายนอก โดยประกอบไฟล์ ZIP เอง (เก็บแบบไม่บีบอัด)
@@ -2016,7 +2042,7 @@ function renderPlanner(){
       : `<span class="plan-seq-no">—</span>`;
     return `<tr>
       <td><div class="plan-seq">${seq}</div></td>
-      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml((r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">เฉพาะบอลบางไซส์</div>' : ''}</td>
+      <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml((r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">เฉพาะบอลบางไซส์</div>' : ''}${r.step.rank_src === 'manual' ? `<button class="plan-move plan-del plan-del-step" data-delstep="${dept}" data-job="${job.uid}" title="ลบขั้นตอนที่เพิ่มเอง">✕</button>` : ''}</td>
       <td><div class="plan-material" title="${escapeHtml(material).replace(/"/g,'&quot;')}">${material ? escapeHtml(planShortMaterial(material)) : '—'}</div></td>
       <td class="num">
         <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
@@ -2058,6 +2084,15 @@ function renderPlanner(){
               <td></td>
             </tr>`;
     const noSteps = !jp.main.length && !jp.extra.length;
+    const usedDepts = new Set(job.steps.map(s=> s.dept));
+    const deptChoices = planDeptOptions().filter(d=> !usedDepts.has(d));
+    const manualAddHtml = `
+      <div class="plan-manual-add">
+        <input class="search-box plan-manual-dept-input" list="planDeptList-${job.uid}" data-job="${job.uid}"
+               placeholder="ชื่อขั้นตอน/หน่วยงานที่จะเพิ่มเอง..." autocomplete="off">
+        <datalist id="planDeptList-${job.uid}">${deptChoices.map(d=>`<option value="${escapeHtml(d).replace(/"/g,'&quot;')}"></option>`).join('')}</datalist>
+        <button class="connect-btn ghost plan-manual-add-btn" data-job="${job.uid}">+ เพิ่มขั้นตอนเอง</button>
+      </div>`;
     return `<div class="panel plan-job">
       <div class="plan-job-head">
         <div class="plan-job-id">
@@ -2067,7 +2102,7 @@ function renderPlanner(){
         </div>
         <div class="plan-job-qty">จำนวน <b>${fmtNum(jp.qty)}</b></div>
       </div>
-      ${noSteps ? `<div class="plan-empty">Item นี้ยังไม่มีบรรทัดที่ระบุหน่วยงานในข้อมูลย้อนหลัง จึงคำนวณขั้นตอนการผลิตให้ไม่ได้</div>` : `
+      ${noSteps ? `<div class="plan-empty">Item นี้ยังไม่มีบรรทัดที่ระบุหน่วยงานในข้อมูลย้อนหลัง — เพิ่มขั้นตอนเองด้านล่างแล้วกรอกอัตราประมาณการ ก็คำนวณรวมกับ Item อื่นในแผนนี้ได้เลย โดยไม่ต้องรอข้อมูลจริงในชีต</div>` : `
       <div class="table-wrap">
         <table class="plan-step-table">
           <thead>
@@ -2088,6 +2123,7 @@ function renderPlanner(){
           </tbody>
         </table>
       </div>`}
+      ${manualAddHtml}
     </div>`;
   };
 
@@ -2148,7 +2184,7 @@ function renderPlanner(){
 function refreshPlanner(){
   const options = planItemOptions();
   planState.jobs.forEach(j=>{
-    j.steps = (j.item && options.includes(j.item)) ? buildPlanSteps(j.item, j.order) : [];
+    j.steps = j.item ? buildPlanSteps(j.item, j.order, j.manualSteps) : [];
   });
   if(planState.computed && !planValidJobs().length) planState.computed = false;
   const itemList = document.getElementById('planItemList');
@@ -2224,10 +2260,11 @@ function refreshPlanner(){
       const raw = (inp.value || '').trim();
       const match = planItemOptions().find(i => i.toLowerCase() === raw.toLowerCase());
       job.item = match || raw;
-      // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับไว้ของเดิมจึงใช้ไม่ได้
-      job.steps = match ? buildPlanSteps(match, []) : [];
+      // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับ/ขั้นตอนที่เพิ่มเองไว้ของเดิมจึงใช้ไม่ได้
+      job.steps = job.item ? buildPlanSteps(job.item, [], []) : [];
       job.order = [];
       job.overrides = {};
+      job.manualSteps = [];
     }else{
       const v = parseFloat(inp.value);
       job.qty = (isNaN(v) || v <= 0) ? 1 : v;
@@ -2240,6 +2277,35 @@ function refreshPlanner(){
   // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
   const box = document.getElementById('planResult');
   box.addEventListener('click', (e)=>{
+    // ปุ่ม "+ เพิ่มขั้นตอนเอง" — เติมขั้นตอนเปล่าให้กรอกอัตราเอง (Item ใหม่/ประวัติไม่ครบ)
+    const addManual = e.target.closest('.plan-manual-add-btn');
+    if(addManual){
+      const job = planFindJob(parseInt(addManual.getAttribute('data-job'), 10));
+      if(!job) return;
+      const input = box.querySelector(`.plan-manual-dept-input[data-job="${job.uid}"]`);
+      const dept = input ? input.value.trim() : '';
+      if(!dept) return;
+      if(!job.manualSteps) job.manualSteps = [];
+      if(!job.manualSteps.includes(dept)){
+        job.manualSteps.push(dept);
+        job.steps = buildPlanSteps(job.item || null, job.order, job.manualSteps);
+      }
+      renderPlanner();
+      return;
+    }
+    // ปุ่ม ✕ บนขั้นตอนที่เพิ่มเอง — เอาขั้นตอนนั้นออก
+    const delManual = e.target.closest('[data-delstep]');
+    if(delManual){
+      const job = planFindJob(parseInt(delManual.getAttribute('data-job'), 10));
+      if(!job) return;
+      const dept = delManual.getAttribute('data-delstep');
+      job.manualSteps = (job.manualSteps || []).filter(d=> d !== dept);
+      delete job.overrides[dept];
+      job.order = (job.order || []).filter(d=> d !== dept);
+      job.steps = buildPlanSteps(job.item || null, job.order, job.manualSteps);
+      renderPlanner();
+      return;
+    }
     const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
