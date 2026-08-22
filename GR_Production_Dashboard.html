@@ -582,6 +582,22 @@
     background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);
     border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:16px;
   }
+  /* ประวัติแผน (บันทึกในเบราว์เซอร์ ไม่ผูกกับ Google Sheet) */
+  .plan-history-overlay{
+    position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.55);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .plan-history-modal{width:100%;max-width:640px;max-height:80vh;overflow-y:auto;}
+  .plan-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;}
+  .plan-history-head h2{margin:0;}
+  .plan-history-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .plan-history-item{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  }
+  .plan-history-info{font-size:12.5px;color:var(--text-dim);line-height:1.7;}
+  .plan-history-info b{color:var(--text);font-family:var(--mono);}
+  .plan-history-actions{display:flex;gap:6px;flex-shrink:0;}
 
   /* Item card */
   .plan-job{margin-bottom:16px;}
@@ -766,6 +782,19 @@
         <button class="connect-btn ghost" id="planAddBtn">+ เพิ่ม Item</button>
         <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ คำนวณเวลาในการผลิต</button>
         <button class="connect-btn ghost" id="planExportBtn">📊 Export Excel</button>
+        <button class="connect-btn ghost" id="planSaveBtn">💾 บันทึกแผนนี้</button>
+        <button class="connect-btn ghost" id="planHistoryBtn">🕑 ประวัติแผน</button>
+      </div>
+    </div>
+
+    <div class="plan-history-overlay" id="planHistoryOverlay" style="display:none;">
+      <div class="panel plan-history-modal">
+        <div class="plan-history-head">
+          <h2>ประวัติแผนที่บันทึกไว้</h2>
+          <button class="plan-move" id="planHistoryClose" title="ปิด">✕</button>
+        </div>
+        <div class="panel-note">บันทึกไว้ในเบราว์เซอร์นี้เท่านั้น ไม่ได้ส่งขึ้น Google Sheet และไม่แชร์กับเครื่อง/เบราว์เซอร์อื่น</div>
+        <div class="plan-history-list" id="planHistoryList"></div>
       </div>
     </div>
 
@@ -1767,7 +1796,6 @@ function computePlan(){
   let cursor = planClampToShift(seedDt, hpd, shiftMin);   // เวลาจริง รวมเวลาเริ่มที่แก้เอง — ใช้แสดงวันที่/เวลาจริง
   const startDt = new Date(cursor.getTime());
 
-  let cum = 0;   // จำนวนวันสะสมแบบเรียงต่อกันไม่มีช่องว่าง — ใช้วาดไทม์ไลน์โดยประมาณเท่านั้น
   const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
     const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
@@ -1802,13 +1830,9 @@ function computePlan(){
       r.days = r.hours != null ? r.hours/hpd : null;
     }
 
-    const jobStartDay = cum;
     const jobStartDt = new Date(cursor.getTime());
     main.forEach(r=>{
       fillRow(r);
-      r.start_day = cum;
-      if(r.days != null) cum += r.days;
-      r.end_day = cum;
 
       // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
       const ov = job.overrides[r.step.dept];
@@ -1820,9 +1844,20 @@ function computePlan(){
       r.start_dt = new Date(cursor.getTime());
       if(r.days != null) cursor = planAdvanceHours(cursor, r.hours, hpd, shiftMin);
       r.end_dt = r.days != null ? new Date(cursor.getTime()) : null;
+      // ใช้จุดเดียวกับตาราง เพื่อให้ไทม์ไลน์ขยับตามเวลาเริ่มที่แก้เองเสมอ
+      r.tl_start = r.start_dt;
+      r.tl_end = r.end_dt;
     });
-    // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากจุดเริ่มของ Item นั้น
-    extra.forEach(r=>{ fillRow(r); r.start_day = jobStartDay; r.end_day = jobStartDay + (r.days || 0); r.start_dt = null; r.end_dt = null; });
+    // จุดเริ่มจริงของ Item นี้ — ถ้าขั้นตอนแรกของสายหลักถูกแก้เวลาเอง ให้ยึดเวลานั้น ไม่ใช่เวลาก่อนแก้
+    const jobRealStartDt = main.length ? main[0].start_dt : jobStartDt;
+    // ขั้นตอนแยกทำเมื่อไรก็ได้ ไม่ผูกวันที่จริงให้ (ตารางแสดง "—") แต่ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
+    extra.forEach(r=>{
+      fillRow(r);
+      r.start_dt = null;
+      r.end_dt = null;
+      r.tl_start = jobRealStartDt;
+      r.tl_end = r.hours != null ? planAdvanceHours(jobRealStartDt, r.hours, hpd, shiftMin) : null;
+    });
 
     const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
     const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
@@ -1833,9 +1868,7 @@ function computePlan(){
       totalHours: mainHours + extraHours,
       mainDays: mainHours/hpd,
       totalDays: (mainHours + extraHours)/hpd,
-      start_day: jobStartDay,
-      end_day: cum,
-      start_dt: main.length ? jobStartDt : null,
+      start_dt: main.length ? jobRealStartDt : null,
       end_dt: main.length ? new Date(cursor.getTime()) : null
     };
   });
@@ -2066,6 +2099,127 @@ function planExportExcel(){
   planDownloadBlob(blob, `แผนผลิต_${safe}_${planTodayIso()}.xlsx`);
 }
 
+// ---------- ประวัติแผนผลิต (เก็บใน localStorage ของเบราว์เซอร์นี้ ไม่เกี่ยวกับ Google Sheet) ----------
+const PLAN_HISTORY_LS_KEY = 'gr_plan_history';
+const PLAN_HISTORY_MAX = 50;
+
+function planHistoryLoadAll(){
+  try{
+    const list = JSON.parse(localStorage.getItem(PLAN_HISTORY_LS_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  }catch(e){ return []; }
+}
+function planHistorySaveAll(list){
+  try{ localStorage.setItem(PLAN_HISTORY_LS_KEY, JSON.stringify(list)); }
+  catch(e){ alert('บันทึกประวัติไม่สำเร็จ (พื้นที่จัดเก็บของเบราว์เซอร์อาจเต็ม หรือถูกปิดใช้งาน)'); }
+}
+
+/** เก็บเฉพาะค่าที่ผู้ใช้กรอก/แก้เอง — ไม่เก็บผลคำนวณ เพราะสร้างใหม่จากข้อมูลย้อนหลังในชีตได้เสมอตอนโหลดกลับมา */
+function planSnapshotCurrent(){
+  return {
+    id: 'ph_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    savedAt: new Date().toISOString(),
+    customer: planState.customer,
+    po: planState.po,
+    hoursPerDay: planState.hoursPerDay,
+    shiftStart: planState.shiftStart,
+    startIso: planState.startIso,
+    scrapPct: planState.scrapPct,
+    rateBasis: planState.rateBasis,
+    jobs: planValidJobs().map(j=> ({
+      item: j.item, qty: j.qty, order: j.order || [], manualSteps: j.manualSteps || [],
+      overrides: j.overrides || {}
+    }))
+  };
+}
+
+/** ปุ่ม "บันทึกแผนนี้" — เก็บสถานะปัจจุบันเป็นรายการใหม่ในประวัติ */
+function planSaveCurrentPlan(){
+  if(!planValidJobs().length){
+    alert('กรอกรายการ Item ก่อนถึงจะบันทึกแผนได้');
+    return;
+  }
+  const list = planHistoryLoadAll();
+  list.unshift(planSnapshotCurrent());
+  planHistorySaveAll(list.slice(0, PLAN_HISTORY_MAX));
+  renderPlanHistoryList();
+  alert('บันทึกแผนนี้ไว้ในประวัติแล้ว (เก็บเฉพาะในเบราว์เซอร์นี้)');
+}
+
+/** ปุ่ม "โหลด" ในประวัติ — แทนที่แผนปัจจุบันด้วยรายการที่บันทึกไว้ แล้วคำนวณใหม่ทันที */
+function planLoadHistoryEntry(id){
+  const entry = planHistoryLoadAll().find(e=> e.id === id);
+  if(!entry) return;
+  planState.customer = entry.customer || '';
+  planState.po = entry.po || '';
+  planState.hoursPerDay = entry.hoursPerDay > 0 ? entry.hoursPerDay : 8;
+  planState.shiftStart = entry.shiftStart || '08:00';
+  planState.startIso = entry.startIso || planTodayIso();
+  planState.scrapPct = entry.scrapPct || 0;
+  planState.rateBasis = entry.rateBasis || 'target_100';
+  planState.jobs = (entry.jobs || []).map(j=> ({
+    uid: ++planJobUid,
+    item: j.item || '',
+    qty: j.qty > 0 ? j.qty : 1,
+    steps: j.item ? buildPlanSteps(j.item, j.order || [], j.manualSteps || []) : [],
+    order: j.order || [],
+    overrides: j.overrides || {},
+    manualSteps: j.manualSteps || []
+  }));
+  if(!planState.jobs.length) planState.jobs.push(planNewJob());
+  planState.computed = planValidJobs().length > 0;
+  planState.dirty = false;
+
+  document.getElementById('planCustomer').value = planState.customer;
+  document.getElementById('planPO').value = planState.po;
+  document.getElementById('planHoursPerDay').value = planState.hoursPerDay;
+  document.getElementById('planShiftStart').value = planState.shiftStart;
+  document.getElementById('planStartDate').value = planState.startIso;
+  document.getElementById('planScrap').value = planState.scrapPct;
+  document.getElementById('planRateBasis').value = planState.rateBasis;
+
+  closePlanHistory();
+  renderPlanRows();
+  renderPlanner();
+}
+function planDeleteHistoryEntry(id){
+  planHistorySaveAll(planHistoryLoadAll().filter(e=> e.id !== id));
+  renderPlanHistoryList();
+}
+function renderPlanHistoryList(){
+  const box = document.getElementById('planHistoryList');
+  if(!box) return;
+  const list = planHistoryLoadAll();
+  if(!list.length){
+    box.innerHTML = `<div class="plan-empty" style="padding:30px;">ยังไม่มีแผนที่บันทึกไว้ — กด “บันทึกแผนนี้” หลังคำนวณแผนเพื่อเก็บไว้ดูย้อนหลัง</div>`;
+    return;
+  }
+  box.innerHTML = list.map(e=>{
+    const dt = new Date(e.savedAt);
+    const when = isNaN(dt.getTime()) ? '—' : planFmtDateTime(dt);
+    const items = (e.jobs || []).map(j=> j.item).filter(Boolean);
+    const itemsLabel = items.length ? escapeHtml(items.slice(0,4).join(', ')) + (items.length > 4 ? ' …' : '') : '—';
+    return `<div class="plan-history-item">
+      <div class="plan-history-info">
+        <div><b>${escapeHtml(e.customer || 'ไม่ระบุลูกค้า')}</b>${e.po ? ' · PO ' + escapeHtml(e.po) : ''}</div>
+        <div>${items.length} Item: ${itemsLabel}</div>
+        <div>บันทึกเมื่อ ${when}</div>
+      </div>
+      <div class="plan-history-actions">
+        <button class="connect-btn ghost" data-loadplan="${e.id}">โหลด</button>
+        <button class="plan-move plan-del" data-delplan="${e.id}" title="ลบ">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function openPlanHistory(){
+  renderPlanHistoryList();
+  document.getElementById('planHistoryOverlay').style.display = 'flex';
+}
+function closePlanHistory(){
+  document.getElementById('planHistoryOverlay').style.display = 'none';
+}
+
 function renderPlanner(){
   const box = document.getElementById('planResult');
   const countEl = document.getElementById('planJobCount');
@@ -2214,16 +2368,23 @@ function renderPlanner(){
 
   const jobsHtml = plan.jobs.map(jobHtml).join('');
 
-  const span = Math.max(plan.jobs.reduce((m,j)=> Math.max(m, j.end_day||0), 0), 0.0001);
+  // ตำแหน่ง/ความยาวแท่งอิงจากเวลาเริ่ม-จบจริงของแต่ละขั้นตอน (รวมเวลาที่แก้เอง) จึงขยับตามทันทีที่แก้เวลาในตาราง
+  let tlMinMs = null, tlMaxMs = null;
+  plan.jobs.forEach(jp=>{
+    jp.main.concat(jp.extra).forEach(r=>{
+      if(r.tl_start){ const t = r.tl_start.getTime(); if(tlMinMs == null || t < tlMinMs) tlMinMs = t; }
+      if(r.tl_end){ const t = r.tl_end.getTime(); if(tlMaxMs == null || t > tlMaxMs) tlMaxMs = t; }
+    });
+  });
+  const tlSpanMs = (tlMinMs != null && tlMaxMs != null) ? Math.max(tlMaxMs - tlMinMs, 3600000) : 1;
   const tlRow = (r, standalone)=>{
     const c = getDeptColor(r.step.dept);
     const name = escapeHtml((r.step.dept));
-    if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
-    const left = (r.start_day/span)*100;
-    const width = Math.max((r.days/span)*100, 1.2);
+    if(!r.tl_start || !r.tl_end) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
+    const left = ((r.tl_start.getTime() - tlMinMs)/tlSpanMs)*100;
+    const width = Math.max(((r.tl_end.getTime() - r.tl_start.getTime())/tlSpanMs)*100, 1.2);
     const material = cleanMaterialDisplay(r.step.material || '') || 'ไม่มีข้อมูลวัตถุดิบ';
-    const tip = `${r.step.dept} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน`
-      + (r.start_dt ? `\n${planFmtDateTime(r.start_dt)} → ${planFmtDateTime(r.end_dt)}` : '');
+    const tip = `${r.step.dept} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน\n${planFmtDateTime(r.tl_start)} → ${planFmtDateTime(r.tl_end)}`;
     return `<div class="plan-tl-row">
       <div class="plan-tl-name">${name}</div>
       <div class="plan-tl-track">
@@ -2234,7 +2395,7 @@ function renderPlanner(){
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>ไทม์ไลน์โดยประมาณ</h2>
-      <div class="panel-note">ความยาวแท่ง = จำนวนวันของขั้นตอนนั้น เรียงต่อกันทั้งภายใน Item และข้าม Item ตามลำดับในแผน (สมมติว่าทำทีละขั้น ไม่ทับซ้อนกัน)</div>
+      <div class="panel-note">ตำแหน่งและความยาวแท่งอิงจากเวลาเริ่ม-จบจริงของแต่ละขั้นตอน รวมเวลาที่แก้เองในตาราง (ขยับ/มีช่องว่างตามที่แก้ทันที) ส่วนขั้นตอนแยกวาดจากจุดเริ่มของ Item นั้นแบบประมาณการเท่านั้น</div>
       <div class="plan-timeline">
         ${plan.jobs.map((jp,i)=> `<div class="plan-tl-job">#${i+1} ${escapeHtml(jp.job.item)}</div>`
             + jp.main.map(r=> tlRow(r, false)).join('')
@@ -2315,6 +2476,17 @@ function refreshPlanner(){
   document.getElementById('planAddBtn').addEventListener('click', planAddRow);
   document.getElementById('planCalcBtn').addEventListener('click', planCompute);
   document.getElementById('planExportBtn').addEventListener('click', planExportExcel);
+  document.getElementById('planSaveBtn').addEventListener('click', planSaveCurrentPlan);
+  document.getElementById('planHistoryBtn').addEventListener('click', openPlanHistory);
+  document.getElementById('planHistoryClose').addEventListener('click', closePlanHistory);
+  const historyOverlay = document.getElementById('planHistoryOverlay');
+  historyOverlay.addEventListener('click', (e)=>{ if(e.target === historyOverlay) closePlanHistory(); });
+  document.getElementById('planHistoryList').addEventListener('click', (e)=>{
+    const loadBtn = e.target.closest('[data-loadplan]');
+    if(loadBtn){ planLoadHistoryEntry(loadBtn.getAttribute('data-loadplan')); return; }
+    const delBtn = e.target.closest('[data-delplan]');
+    if(delBtn && confirm('ลบแผนนี้ออกจากประวัติ?')) planDeleteHistoryEntry(delBtn.getAttribute('data-delplan'));
+  });
 
   // กล่องรายการ Item — แก้รหัส/จำนวน จัดลำดับ และลบแถว
   const rowBox = document.getElementById('planItemRows');
