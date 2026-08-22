@@ -554,6 +554,15 @@
   .plan-timeline{display:flex;flex-direction:column;gap:8px;}
   .plan-tl-row{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;}
   .plan-tl-name{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .plan-sep td{
+    background:var(--bg-2);color:var(--text-dim);font-size:11.5px;letter-spacing:.02em;
+    border-top:1px solid var(--border);
+  }
+  .plan-tl-bar.standalone{opacity:.55;}
+  .plan-tl-sep{
+    font-size:11px;color:var(--text-faint);margin:6px 0 2px;padding-top:8px;
+    border-top:1px dashed var(--border);
+  }
   .plan-tl-track{position:relative;height:22px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:5px;}
   .plan-tl-bar{
     position:absolute;top:0;bottom:0;border-radius:4px;min-width:3px;display:flex;align-items:center;
@@ -1135,7 +1144,6 @@ function initFromData(data){
   groupedProduction = groupProductionData(data);
   renderProduction();
 
-  globalStepRank = buildStepRank(data);
   refreshPlanner();
 
   renderFreshness(data);
@@ -1566,7 +1574,6 @@ const planState = {
   order: [],       // ลำดับที่ผู้ใช้จัดเอง (ชื่อหน่วยงาน) — คงไว้เมื่อข้อมูลรีเฟรช
   overrides: {}    // dept -> {rate, stations} ค่าที่ผู้ใช้พิมพ์ทับ
 };
-let globalStepRank = {};
 
 function planTodayIso(){
   const d = new Date();
@@ -1610,55 +1617,15 @@ const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตั�
 const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
 
 /**
- * ตำแหน่งของหน่วยงานในสายผลิต (1 = ต้นสาย)
- *   standard = ตรงกับลำดับมาตรฐาน
- *   variant  = ชื่อแตกย่อย เช่น "ตัดยาง(เข้ามุม)" — วางต่อท้ายขั้นตอนหลักที่ชื่อขึ้นต้นเหมือนกัน
- *   data     = ไม่อยู่ในลำดับมาตรฐานเลย ต้องเดาจากข้อมูลย้อนหลัง (ติดป้ายเตือนไว้ในตาราง)
+ * ตำแหน่งของหน่วยงานในสายหลัก — 1 = ต้นสาย, null = ไม่ได้อยู่ในสายหลัก
+ *
+ * หน่วยงานที่ไม่อยู่ใน STEP_ORDER เป็น "ขั้นตอนแยก" ไม่ได้ต่อจากขั้นตอนใด
+ * (ยืนยันจากหน้างาน) จึงไม่เดาตำแหน่งให้ แต่แยกไปคิดเวลาต่างหาก และไม่นับ
+ * รวมในวันที่เสร็จของสายหลัก
  */
 function standardStepRank(dept){
-  const exact = STEP_ORDER.indexOf(dept);
-  if(exact !== -1) return {rank: exact + 1, src: 'standard'};
-
-  let base = -1, baseLen = 0;
-  STEP_ORDER.forEach((s,i)=>{
-    if(dept.indexOf(s) === 0 && s.length > baseLen){ base = i; baseLen = s.length; }
-  });
-  if(base !== -1) return {rank: base + 1.5, src: 'variant'};
-
-  const g = globalStepRank[dept];
-  if(g != null) return {rank: 1 + g*(STEP_ORDER.length - 1), src: 'data'};
-  return {rank: STEP_ORDER.length + 1, src: 'none'};
-}
-
-/**
- * ตัวสำรองสำหรับหน่วยงานที่ไม่อยู่ใน STEP_ORDER: จัดอันดับว่าอยู่ต้นสายหรือปลายสาย
- * จากวันที่บันทึกงานครั้งแรกของแต่ละใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย
- * ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้บอกอะไรเรื่องลำดับ จึงข้ามไป
- */
-function buildStepRank(rows){
-  const groups = new Map();
-  rows.forEach(r=>{
-    if(!r.dept) return;
-    const key = (r.item_code||'') + '|' + (r.po||'');
-    if(!groups.has(key)) groups.set(key, new Map());
-    const g = groups.get(key);
-    const iso = r.date_iso || '';
-    if(!g.has(r.dept) || iso < g.get(r.dept)) g.set(r.dept, iso);
-  });
-  const acc = new Map();
-  groups.forEach(g=>{
-    if(g.size < 2) return;
-    const ordered = [...g.entries()].sort((a,b)=> a[1] < b[1] ? -1 : (a[1] > b[1] ? 1 : 0)).map(e=>e[0]);
-    ordered.forEach((dept,i)=>{
-      const cur = acc.get(dept) || {sum:0, n:0};
-      cur.sum += i/(ordered.length-1);
-      cur.n++;
-      acc.set(dept, cur);
-    });
-  });
-  const out = {};
-  acc.forEach((v,k)=>{ out[k] = v.sum/v.n; });
-  return out;
+  const i = STEP_ORDER.indexOf(dept);
+  return i !== -1 ? {rank: i + 1, src: 'standard'} : {rank: null, src: 'standalone'};
 }
 
 /** สรุปสถิติย้อนหลังของ Item ที่เลือก แยกตามขั้นตอน (หน่วยงาน) */
@@ -1693,13 +1660,21 @@ function buildPlanSteps(item){
     s.rank = rank.rank;
     s.rank_src = rank.src;
   });
-  steps.sort((a,b)=> a.rank - b.rank || a.dept.localeCompare(b.dept));
+  // สายหลักเรียงตาม STEP_ORDER ส่วนขั้นตอนแยกไปต่อท้าย เรียงตามชื่อ
+  const byRoute = (a,b)=>{
+    if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
+    if(a.rank == null) return a.dept.localeCompare(b.dept);
+    return a.rank - b.rank || a.dept.localeCompare(b.dept);
+  };
+  steps.sort(byRoute);
 
-  // ผู้ใช้เคยจัดลำดับเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
+  // ผู้ใช้เคยจัดลำดับสายหลักเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
   if(planState.order.length){
     steps.sort((a,b)=>{
+      if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
+      if(a.rank == null) return byRoute(a,b);
       const ia = planState.order.indexOf(a.dept), ib = planState.order.indexOf(b.dept);
-      if(ia === -1 && ib === -1) return 0;
+      if(ia === -1 && ib === -1) return byRoute(a,b);
       if(ia === -1) return 1;
       if(ib === -1) return -1;
       return ia - ib;
@@ -1731,59 +1706,70 @@ function planStepStations(step){
  * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
  */
 function computePlan(){
-  const steps = planState.steps;
   const qty = planState.qty > 0 ? planState.qty : 0;
   const hpd = planState.hoursPerDay > 0 ? planState.hoursPerDay : 8;
   const keep = 1 - Math.min(90, Math.max(0, planState.scrapPct))/100;
+  const startIso = planState.startIso || planTodayIso();
 
-  const rows = steps.map(s=>({step:s}));
+  const main = planState.steps.filter(s=> s.rank != null).map(s=>({step:s}));
+  const extra = planState.steps.filter(s=> s.rank == null).map(s=>({step:s}));
+
+  // สายหลัก: เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
+  // ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
   let need = qty;
-  for(let i = rows.length-1; i >= 0; i--){
-    rows[i].qty_out = need;
-    rows[i].qty_in = keep > 0 ? need/keep : need;
-    need = rows[i].qty_in;
+  for(let i = main.length-1; i >= 0; i--){
+    main[i].qty_out = need;
+    main[i].qty_in = keep > 0 ? need/keep : need;
+    need = main[i].qty_in;
   }
+  // ขั้นตอนแยกไม่ได้อยู่ในโซ่นี้ จึงเผื่อของเสียชั้นเดียวจากยอดที่ต้องการ
+  extra.forEach(r=>{ r.qty_out = qty; r.qty_in = keep > 0 ? qty/keep : qty; });
 
-  let cum = 0;
-  rows.forEach(r=>{
+  function fillRow(r){
     const {rate, src} = planStepRate(r.step);
     r.rate = rate;
     r.rate_src = src;
     r.stations = planStepStations(r.step);
     r.hours = (rate && rate > 0) ? r.qty_in/(rate*r.stations) : null;
     r.days = r.hours != null ? r.hours/hpd : null;
+    r.cost = (r.step.cost_per_pc != null) ? r.qty_in*r.step.cost_per_pc : null;
+  }
+
+  let cum = 0;
+  main.forEach(r=>{
+    fillRow(r);
     r.start_day = cum;
     if(r.days != null) cum += r.days;
     r.end_day = cum;
-    r.cost = (r.step.cost_per_pc != null) ? r.qty_in*r.step.cost_per_pc : null;
+    r.start_iso = r.days != null ? planAddWorkingDays(startIso, Math.floor(r.start_day)) : null;
+    r.end_iso = r.days != null ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1)) : null;
   });
+  // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากวันที่ 0 เท่านั้น
+  extra.forEach(r=>{ fillRow(r); r.start_day = 0; r.end_day = r.days || 0; r.start_iso = null; r.end_iso = null; });
 
-  const startIso = planState.startIso || planTodayIso();
-  rows.forEach(r=>{
-    if(r.days == null){ r.start_iso = null; r.end_iso = null; return; }
-    r.start_iso = planAddWorkingDays(startIso, Math.floor(r.start_day));
-    r.end_iso = planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1));
-  });
-
-  const totalHours = rows.reduce((s,r)=> s + (r.hours||0), 0);
-  const totalCost = rows.reduce((s,r)=> s + (r.cost||0), 0);
-  const missingRate = rows.filter(r=> r.rate == null).length;
+  const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
+  const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
+  const mainCost = sum(main,'cost'), extraCost = sum(extra,'cost');
+  const rows = main.concat(extra);
+  // คอขวดคิดจากสายหลัก เพราะเป็นตัวกำหนดวันที่เสร็จ ขั้นตอนแยกไม่ได้ขวางสายการผลิต
   let bottleneck = null;
-  rows.forEach(r=>{ if(r.hours != null && (!bottleneck || r.hours > bottleneck.hours)) bottleneck = r; });
+  (main.length ? main : extra).forEach(r=>{ if(r.hours != null && (!bottleneck || r.hours > bottleneck.hours)) bottleneck = r; });
 
   return {
-    rows, startIso, qty, hpd,
-    startQty: rows.length ? rows[0].qty_in : qty,
-    totalHours,
-    totalDays: totalHours/hpd,
-    totalCost,
-    finishIso: rows.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : startIso,
-    missingRate,
+    rows, main, extra, startIso, qty, hpd,
+    startQty: main.length ? main[0].qty_in : (extra.length ? extra[0].qty_in : qty),
+    mainHours, extraHours, mainCost,
+    totalHours: mainHours + extraHours,
+    mainDays: mainHours/hpd,
+    totalDays: (mainHours + extraHours)/hpd,
+    totalCost: mainCost + extraCost,
+    finishIso: main.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : startIso,
+    missingRate: rows.filter(r=> r.rate == null).length,
     bottleneck
   };
 }
 
-const PLAN_RANK_LABEL = {standard:'· စံအစဉ်', variant:'· ပင်မအဆင့်နောက်', data:'· မှတ်တမ်းမှ ခန့်မှန်း', none:'· အစဉ် မသိ'};
+const PLAN_RANK_LABEL = {standard:'· စံအစဉ်', standalone:'· သီးသန့်အဆင့်'};
 
 const PLAN_RATE_SRC_LABEL = {
   rate_target_95: 'ပန်းတိုင် 95% မှ',
@@ -1810,15 +1796,18 @@ function renderPlanner(){
 
   const plan = computePlan();
   countEl.textContent = String(plan.rows.length);
+  const split = plan.extra.length > 0;   // มีขั้นตอนแยกที่ไม่อยู่ในสายหลัก
 
   const kpis = [
     {label:'စတင်ထည့်ရမည့် အရေအတွက်', value:fmtNum(plan.startQty), unit:'ခု',
      sub:'ကောင်းသည့်ပစ္စည်း %s ခု ရရန် (အပျက် %p% ခွင့်ပြု)'.replace('%s', fmtNum(plan.qty)).replace('%p', fmtNum(planState.scrapPct,1)), cls:''},
-    {label:'စုစုပေါင်း အချိန်', value:fmtNum(plan.totalHours,1), unit:'နာရီ', sub:'အဆင့်အားလုံး ဆက်တိုက်လုပ်သည့် စုစုပေါင်း', cls:''},
-    {label:'အလုပ်လုပ်ရက် အရေအတွက်', value:fmtNum(plan.totalDays,1), unit:'ရက်',
-     sub:'%h နာရီ/ရက် နှုန်းဖြင့်'.replace('%h', fmtNum(plan.hpd,1)), cls:''},
+    {label:'စုစုပေါင်း အချိန်', value:fmtNum(plan.totalHours,1), unit:'နာရီ',
+     sub: split ? 'ပင်မလိုင်း %m နာရီ + သီးသန့်အဆင့် %e နာရီ'.replace('%m', fmtNum(plan.mainHours,1)).replace('%e', fmtNum(plan.extraHours,1))
+                : 'အဆင့်အားလုံး ဆက်တိုက်လုပ်သည့် စုစုပေါင်း', cls:''},
+    {label:'အလုပ်လုပ်ရက် အရေအတွက်', value:fmtNum(plan.mainDays,1), unit:'ရက်',
+     sub:'%h နာရီ/ရက် နှုန်းဖြင့်'.replace('%h', fmtNum(plan.hpd,1)) + (split ? ' · သီးသန့်အဆင့် မပါ' : ''), cls:''},
     {label:'ပြီးစီးမည့်ရက် ခန့်မှန်း', value:planFmtDate(plan.finishIso), unit:'', textValue:true,
-     sub:'စတင် %d · တနင်္ဂနွေ ကျော်သည်'.replace('%d', planFmtDate(plan.startIso)), cls:''},
+     sub:'စတင် %d · တနင်္ဂနွေ ကျော်သည်'.replace('%d', planFmtDate(plan.startIso)) + (split ? ' · သီးသန့်အဆင့် မပါ' : ''), cls:''},
     {label:'လုပ်အားခ ခန့်မှန်း', value:fmtNum(plan.totalCost,0), unit:'฿', sub:'အရေအတွက် × မှတ်တမ်းရှိ တစ်ခုချင်းကုန်ကျစရိတ်', cls:''},
     {label:'အကြပ်အတည်း အဆင့်', value: plan.bottleneck ? escapeHtml(translateDept(plan.bottleneck.step.dept)) : '—', unit:'', textValue:true,
      sub: plan.bottleneck ? '%h နာရီဖြင့် အကြာဆုံး'.replace('%h', fmtNum(plan.bottleneck.hours,1)) : '—', cls:'bad'},
@@ -1831,38 +1820,61 @@ function renderPlanner(){
       <div class="sub ${k.cls}">${k.sub}</div>
     </div>`).join('') + `</div>`;
 
-  const bodyHtml = plan.rows.map((r,i)=>{
+  // แถวของสายหลักเลื่อนลำดับได้ ส่วนขั้นตอนแยกไม่มีลำดับให้เลื่อน
+  const rowHtml = (r, no, lastNo)=>{
     const c = getDeptColor(r.step.dept);
+    const dept = escapeHtml(r.step.dept).replace(/"/g,'&quot;');
     const srcLabel = r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src] || '') : 'အချက်အလက်မရှိ';
+    const seq = no
+      ? `<span class="plan-seq-no">${no}</span>
+          <button class="plan-move" data-move="up" data-idx="${no-1}" title="အပေါ်တင်ရန်" ${no===1?'disabled':''}>▲</button>
+          <button class="plan-move" data-move="down" data-idx="${no-1}" title="အောက်ချရန်" ${no===lastNo?'disabled':''}>▼</button>`
+      : `<span class="plan-seq-no">—</span>`;
     return `<tr>
-      <td>
-        <div class="plan-seq">
-          <span class="plan-seq-no">${i+1}</span>
-          <button class="plan-move" data-move="up" data-idx="${i}" title="အပေါ်တင်ရန်" ${i===0?'disabled':''}>▲</button>
-          <button class="plan-move" data-move="down" data-idx="${i}" title="အောက်ချရန်" ${i===plan.rows.length-1?'disabled':''}>▼</button>
-        </div>
-      </td>
+      <td><div class="plan-seq">${seq}</div></td>
       <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">ဘောလုံး အချို့ဆိုက်သာ</div>' : ''}</td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
+        <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
       </td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.stations}">
+        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-dept="${dept}" value="${r.stations}">
       </td>
       <td class="num mono">${fmtNum(r.qty_in)}</td>
       <td class="num mono">${r.hours != null ? fmtNum(r.hours,2) : '—'}</td>
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
       <td class="num mono">${r.cost != null ? fmtNum(r.cost,0) : '—'}</td>
-      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' || r.step.rank_src === 'variant' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || PLAN_RANK_LABEL.none}</div></td>
+      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
     </tr>`;
-  }).join('');
+  };
+
+  const mainBody = plan.main.map((r,i)=> rowHtml(r, i+1, plan.main.length)).join('');
+  const extraBody = split
+    ? `<tr class="plan-sep"><td colspan="10">သီးသန့်အဆင့် — ပင်မလိုင်း၏ အစဉ်တွင် မပါဝင်သဖြင့် ရက်စွဲ မသတ်မှတ်ဘဲ ပြီးစီးရက်တွင်လည်း မထည့်တွက်ပါ</td></tr>` + plan.extra.map(r=> rowHtml(r, 0, 0)).join('')
+    : '';
+  const totalRows = (split ? `
+            <tr class="plan-tot">
+              <td colspan="5">ပင်မလိုင်း စုစုပေါင်း</td>
+              <td class="num mono">${fmtNum(plan.mainHours,2)}</td>
+              <td class="num mono">${fmtNum(plan.mainDays,2)}</td>
+              <td class="mono">${planFmtDate(plan.startIso)} → ${planFmtDate(plan.finishIso)}</td>
+              <td class="num mono">${fmtNum(plan.mainCost,0)}</td>
+              <td></td>
+            </tr>` : '') + `
+            <tr class="plan-tot">
+              <td colspan="5">စုစုပေါင်း</td>
+              <td class="num mono">${fmtNum(plan.totalHours,2)}</td>
+              <td class="num mono">${fmtNum(plan.totalDays,2)}</td>
+              <td class="mono">${split ? '—' : planFmtDate(plan.startIso) + ' → ' + planFmtDate(plan.finishIso)}</td>
+              <td class="num mono">${fmtNum(plan.totalCost,0)}</td>
+              <td></td>
+            </tr>`;
 
   const tableHtml = `
     <div class="panel table-panel">
       <h2>ထုတ်လုပ်မှု အဆင့်များ</h2>
-      <div class="panel-note">နှုန်းနှင့် စက်အလုံးရေကို ဇယားထဲတွင် ပြင်နိုင်သည် (Enter နှိပ်ပါ သို့မဟုတ် အပြင်ကိုကလစ်နှိပ်ပါ) — အဆင့်အစဉ်ပြောင်းရန် ▲▼ ကို နှိပ်ပါ</div>
+      <div class="panel-note">နှုန်းနှင့် စက်အလုံးရေကို ဇယားထဲတွင် ပြင်နိုင်သည် (Enter နှိပ်ပါ သို့မဟုတ် အပြင်ကိုကလစ်နှိပ်ပါ) — ▲▼ သည် ပင်မလိုင်းအဆင့်များကိုသာ ရွှေ့ပေးသည်</div>
       <div class="table-wrap">
         <table id="planStepTable">
           <thead>
@@ -1879,49 +1891,45 @@ function renderPlanner(){
               <th class="num">ကိုးကား (မှတ်တမ်း)</th>
             </tr>
           </thead>
-          <tbody>${bodyHtml}
-            <tr class="plan-tot">
-              <td colspan="5">စုစုပေါင်း</td>
-              <td class="num mono">${fmtNum(plan.totalHours,2)}</td>
-              <td class="num mono">${fmtNum(plan.totalDays,2)}</td>
-              <td class="mono">${planFmtDate(plan.startIso)} → ${planFmtDate(plan.finishIso)}</td>
-              <td class="num mono">${fmtNum(plan.totalCost,0)}</td>
-              <td></td>
-            </tr>
+          <tbody>${mainBody}${extraBody}${totalRows}
           </tbody>
         </table>
       </div>
     </div>`;
 
   const span = Math.max(plan.rows.reduce((m,r)=> Math.max(m, r.end_day||0), 0), 0.0001);
+  const tlRow = (r, standalone)=>{
+    const c = getDeptColor(r.step.dept);
+    const name = escapeHtml(translateDept(r.step.dept));
+    if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
+    const left = (r.start_day/span)*100;
+    const width = Math.max((r.days/span)*100, 1.2);
+    return `<div class="plan-tl-row">
+      <div class="plan-tl-name">${name}</div>
+      <div class="plan-tl-track">
+        <div class="plan-tl-bar${standalone ? ' standalone' : ''}" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};">${fmtNum(r.days,2)} ရက်</div>
+      </div>
+    </div>`;
+  };
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>ခန့်မှန်း အချိန်ဇယား</h2>
-      <div class="panel-note">ဘားအရှည် = ထိုအဆင့်၏ ရက်အရေအတွက်၊ ဇယားအစဉ်အတိုင်း ဆက်တိုက်စီထားသည် (တစ်ဆင့်ချင်း လုပ်သည်ဟု ယူဆသည်)</div>
+      <div class="panel-note">ဘားအရှည် = ထိုအဆင့်၏ ရက်အရေအတွက်၊ ပင်မလိုင်းကို အစဉ်အတိုင်း ဆက်တိုက်စီထားသည် (တစ်ဆင့်ချင်း လုပ်သည်ဟု ယူဆသည်)</div>
       <div class="plan-timeline">
-        ${plan.rows.map(r=>{
-          const c = getDeptColor(r.step.dept);
-          if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${escapeHtml(translateDept(r.step.dept))}</div><div class="plan-tl-track"></div></div>`;
-          const left = (r.start_day/span)*100;
-          const width = Math.max((r.days/span)*100, 1.2);
-          return `<div class="plan-tl-row">
-            <div class="plan-tl-name">${escapeHtml(translateDept(r.step.dept))}</div>
-            <div class="plan-tl-track">
-              <div class="plan-tl-bar" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};">${fmtNum(r.days,2)} ရက်</div>
-            </div>
-          </div>`;
-        }).join('')}
+        ${plan.main.map(r=> tlRow(r, false)).join('')}
+        ${split ? `<div class="plan-tl-sep">သီးသန့်အဆင့် — မည်သည့်အချိန်တွင်မဆို လုပ်နိုင်ပြီး မည်သည့်အဆင့်၏ နောက်တွင်မှ မဟုတ်သဖြင့် အစမှတ်မှ ဆွဲထားသည်</div>` + plan.extra.map(r=> tlRow(r, true)).join('') : ''}
       </div>
     </div>`;
 
-  const warnHtml = plan.missingRate
-    ? `<li class="plan-warn">မှတ်တမ်းတွင် ထုတ်လုပ်နှုန်းမရှိသော အဆင့်ရှိသည် — ဇယားထဲတွင် နှုန်းကို ကိုယ်တိုင်ထည့်ပါ၊ မဟုတ်ပါက ထိုအဆင့်ကို အချိန်နှင့် ရက်တွင် ထည့်တွက်မည် မဟုတ်ပါ</li>` : '';
+  const extraNote = split ? `<li><b>သီးသန့်အဆင့်</b> — ပင်မလိုင်းအစဉ်တွင် မပါသော ဌာနများသည် မည်သည့်အဆင့်၏ နောက်တွင်မှ မဟုတ်သော သီးသန့်အဆင့်များဖြစ်၍ အချိန်နှင့် လုပ်အားခကို သီးခြားတွက်ကာ အပျက်အစီးကို တစ်ဆင့်သာ ခွင့်ပြုပြီး ပင်မလိုင်း ပြီးစီးရက်တွင် မထည့်တွက်ပါ</li>` : '';
+  const warnHtml = plan.missingRate ? `<li class="plan-warn">မှတ်တမ်းတွင် ထုတ်လုပ်နှုန်းမရှိသော အဆင့်ရှိသည် — ဇယားထဲတွင် နှုန်းကို ကိုယ်တိုင်ထည့်ပါ၊ မဟုတ်ပါက ထိုအဆင့်ကို အချိန်နှင့် ရက်တွင် ထည့်တွက်မည် မဟုတ်ပါ</li>` : '';
   const assumeHtml = `
     <div class="panel plan-assume">
       <h2>တွက်ချက်ရာတွင် သုံးသော ယူဆချက်များ</h2>
       <div class="panel-note">ကိန်းဂဏန်းအားလုံးမှာ မှတ်တမ်းမှ ခန့်မှန်းချက်ဖြစ်ပြီး အတည်ပြုပြီး ထုတ်လုပ်မှုအစီအစဉ် မဟုတ်ပါ</div>
       <ul>
-        <li><b>အဆင့်အစဉ်</b> — Sheet တွင် အဆင့်အစဉ် (step order) ကော်လံ မရှိသဖြင့် စက်ရုံ၏ စံအစဉ်ကို သုံးသည်: နယ်ခြင်း → ဖိနှိပ်ခြင်း → သဲစက္ကူ → ရာဘာဖြတ်ခြင်း → ကော်သုတ်ခြင်း → တိုက်ချွတ်ခြင်း → တိုက်ချွတ်ခြင်း(ရိုင်း) → တိုက်ချွတ်ခြင်း(သေချာ) → အပေါက်ဖောက်ခြင်း။ ဤအစဉ်တွင် မပါသော ဌာနများကို မှတ်တမ်းမှ ခန့်မှန်းပြီး အမှတ်အသားပြထားသည် — ▲▼ ဖြင့် ပြင်နိုင်သည်</li>
+        <li><b>အဆင့်အစဉ်</b> — Sheet တွင် အဆင့်အစဉ် (step order) ကော်လံ မရှိသဖြင့် ပင်မလိုင်း၏ စံအစဉ်ကို သုံးသည်: နယ်ခြင်း → ဖိနှိပ်ခြင်း → သဲစက္ကူ → ရာဘာဖြတ်ခြင်း → ကော်သုတ်ခြင်း → တိုက်ချွတ်ခြင်း → တိုက်ချွတ်ခြင်း(ရိုင်း) → တိုက်ချွတ်ခြင်း(သေချာ) → အပေါက်ဖောက်ခြင်း။ တိုက်ချွတ်ခြင်း(ရိုင်း)/(သေချာ) မှာ ဘောလုံး အချို့ဆိုက်သာ ဖြစ်သည် — ▲▼ ဖြင့် ပြင်နိုင်သည်</li>
+        ${extraNote}
         <li><b>ထုတ်လုပ်နှုန်း</b> — မှတ်တမ်းရှိ ပန်းတိုင်၏ အလယ်တန်ဖိုး (ခု/နာရီ) သို့မဟုတ် အမှန်နှုန်း = စုစုပေါင်းထုတ်လုပ်မှု ÷ စုစုပေါင်းစက်ချိန် (အပေါ်တွင် ရွေးထားသည့်အတိုင်း)</li>
         <li><b>အချိန်</b> — နာရီ = အရေအတွက် ÷ (နှုန်း × စက်အလုံးရေ)။ စက်မောင်းချိန်သာ တွက်ထားပြီး စက်ပြင်ဆင်ချိန်၊ စောင့်ဆိုင်းချိန်နှင့် အဆင့်ချင်းသယ်ယူချိန် မပါဝင်ပါ</li>
         <li><b>ရက်စွဲ</b> — ထည့်ထားသော အလုပ်ချိန်နာရီ/ရက် ဖြင့် ပြောင်းထားပြီး စက်ရုံပြက္ခဒိန်အရ တနင်္ဂနွေကို ကျော်သည်</li>
@@ -2001,7 +2009,8 @@ setupSearchableSelect({
     if(!btn) return;
     const i = parseInt(btn.getAttribute('data-idx'), 10);
     const j = btn.getAttribute('data-move') === 'up' ? i-1 : i+1;
-    if(j < 0 || j >= planState.steps.length) return;
+    const mainLen = planState.steps.filter(x=> x.rank != null).length;
+    if(j < 0 || j >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
     const s = planState.steps;
     [s[i], s[j]] = [s[j], s[i]];
     planState.order = s.map(x=>x.dept);

@@ -554,6 +554,15 @@
   .plan-timeline{display:flex;flex-direction:column;gap:8px;}
   .plan-tl-row{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;}
   .plan-tl-name{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .plan-sep td{
+    background:var(--bg-2);color:var(--text-dim);font-size:11.5px;letter-spacing:.02em;
+    border-top:1px solid var(--border);
+  }
+  .plan-tl-bar.standalone{opacity:.55;}
+  .plan-tl-sep{
+    font-size:11px;color:var(--text-faint);margin:6px 0 2px;padding-top:8px;
+    border-top:1px dashed var(--border);
+  }
   .plan-tl-track{position:relative;height:22px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:5px;}
   .plan-tl-bar{
     position:absolute;top:0;bottom:0;border-radius:4px;min-width:3px;display:flex;align-items:center;
@@ -1135,7 +1144,6 @@ function initFromData(data){
   groupedProduction = groupProductionData(data);
   renderProduction();
 
-  globalStepRank = buildStepRank(data);
   refreshPlanner();
 
   renderFreshness(data);
@@ -1564,7 +1572,6 @@ const planState = {
   order: [],       // ลำดับที่ผู้ใช้จัดเอง (ชื่อหน่วยงาน) — คงไว้เมื่อข้อมูลรีเฟรช
   overrides: {}    // dept -> {rate, stations} ค่าที่ผู้ใช้พิมพ์ทับ
 };
-let globalStepRank = {};
 
 function planTodayIso(){
   const d = new Date();
@@ -1608,55 +1615,15 @@ const STEP_ORDER = ['รีด','ปั๊ม','เปเปอร์','ตั�
 const STEP_OPTIONAL = {'เจียร์(หยาบ)':true, 'เจียร์(ละเอียด)':true};
 
 /**
- * ตำแหน่งของหน่วยงานในสายผลิต (1 = ต้นสาย)
- *   standard = ตรงกับลำดับมาตรฐาน
- *   variant  = ชื่อแตกย่อย เช่น "ตัดยาง(เข้ามุม)" — วางต่อท้ายขั้นตอนหลักที่ชื่อขึ้นต้นเหมือนกัน
- *   data     = ไม่อยู่ในลำดับมาตรฐานเลย ต้องเดาจากข้อมูลย้อนหลัง (ติดป้ายเตือนไว้ในตาราง)
+ * ตำแหน่งของหน่วยงานในสายหลัก — 1 = ต้นสาย, null = ไม่ได้อยู่ในสายหลัก
+ *
+ * หน่วยงานที่ไม่อยู่ใน STEP_ORDER เป็น "ขั้นตอนแยก" ไม่ได้ต่อจากขั้นตอนใด
+ * (ยืนยันจากหน้างาน) จึงไม่เดาตำแหน่งให้ แต่แยกไปคิดเวลาต่างหาก และไม่นับ
+ * รวมในวันที่เสร็จของสายหลัก
  */
 function standardStepRank(dept){
-  const exact = STEP_ORDER.indexOf(dept);
-  if(exact !== -1) return {rank: exact + 1, src: 'standard'};
-
-  let base = -1, baseLen = 0;
-  STEP_ORDER.forEach((s,i)=>{
-    if(dept.indexOf(s) === 0 && s.length > baseLen){ base = i; baseLen = s.length; }
-  });
-  if(base !== -1) return {rank: base + 1.5, src: 'variant'};
-
-  const g = globalStepRank[dept];
-  if(g != null) return {rank: 1 + g*(STEP_ORDER.length - 1), src: 'data'};
-  return {rank: STEP_ORDER.length + 1, src: 'none'};
-}
-
-/**
- * ตัวสำรองสำหรับหน่วยงานที่ไม่อยู่ใน STEP_ORDER: จัดอันดับว่าอยู่ต้นสายหรือปลายสาย
- * จากวันที่บันทึกงานครั้งแรกของแต่ละใบสั่งผลิต ผลลัพธ์ 0 = ต้นสาย, 1 = ปลายสาย
- * ใบสั่งผลิตที่มีขั้นตอนเดียวไม่ได้บอกอะไรเรื่องลำดับ จึงข้ามไป
- */
-function buildStepRank(rows){
-  const groups = new Map();
-  rows.forEach(r=>{
-    if(!r.dept) return;
-    const key = (r.item_code||'') + '|' + (r.po||'');
-    if(!groups.has(key)) groups.set(key, new Map());
-    const g = groups.get(key);
-    const iso = r.date_iso || '';
-    if(!g.has(r.dept) || iso < g.get(r.dept)) g.set(r.dept, iso);
-  });
-  const acc = new Map();
-  groups.forEach(g=>{
-    if(g.size < 2) return;
-    const ordered = [...g.entries()].sort((a,b)=> a[1] < b[1] ? -1 : (a[1] > b[1] ? 1 : 0)).map(e=>e[0]);
-    ordered.forEach((dept,i)=>{
-      const cur = acc.get(dept) || {sum:0, n:0};
-      cur.sum += i/(ordered.length-1);
-      cur.n++;
-      acc.set(dept, cur);
-    });
-  });
-  const out = {};
-  acc.forEach((v,k)=>{ out[k] = v.sum/v.n; });
-  return out;
+  const i = STEP_ORDER.indexOf(dept);
+  return i !== -1 ? {rank: i + 1, src: 'standard'} : {rank: null, src: 'standalone'};
 }
 
 /** สรุปสถิติย้อนหลังของ Item ที่เลือก แยกตามขั้นตอน (หน่วยงาน) */
@@ -1691,13 +1658,21 @@ function buildPlanSteps(item){
     s.rank = rank.rank;
     s.rank_src = rank.src;
   });
-  steps.sort((a,b)=> a.rank - b.rank || a.dept.localeCompare(b.dept));
+  // สายหลักเรียงตาม STEP_ORDER ส่วนขั้นตอนแยกไปต่อท้าย เรียงตามชื่อ
+  const byRoute = (a,b)=>{
+    if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
+    if(a.rank == null) return a.dept.localeCompare(b.dept);
+    return a.rank - b.rank || a.dept.localeCompare(b.dept);
+  };
+  steps.sort(byRoute);
 
-  // ผู้ใช้เคยจัดลำดับเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
+  // ผู้ใช้เคยจัดลำดับสายหลักเองไว้ ให้ยึดลำดับนั้นก่อน (ขั้นตอนที่เพิ่งโผล่มาใหม่ต่อท้าย)
   if(planState.order.length){
     steps.sort((a,b)=>{
+      if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
+      if(a.rank == null) return byRoute(a,b);
       const ia = planState.order.indexOf(a.dept), ib = planState.order.indexOf(b.dept);
-      if(ia === -1 && ib === -1) return 0;
+      if(ia === -1 && ib === -1) return byRoute(a,b);
       if(ia === -1) return 1;
       if(ib === -1) return -1;
       return ia - ib;
@@ -1729,59 +1704,70 @@ function planStepStations(step){
  * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
  */
 function computePlan(){
-  const steps = planState.steps;
   const qty = planState.qty > 0 ? planState.qty : 0;
   const hpd = planState.hoursPerDay > 0 ? planState.hoursPerDay : 8;
   const keep = 1 - Math.min(90, Math.max(0, planState.scrapPct))/100;
+  const startIso = planState.startIso || planTodayIso();
 
-  const rows = steps.map(s=>({step:s}));
+  const main = planState.steps.filter(s=> s.rank != null).map(s=>({step:s}));
+  const extra = planState.steps.filter(s=> s.rank == null).map(s=>({step:s}));
+
+  // สายหลัก: เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
+  // ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องการส่งมอบจริง
   let need = qty;
-  for(let i = rows.length-1; i >= 0; i--){
-    rows[i].qty_out = need;
-    rows[i].qty_in = keep > 0 ? need/keep : need;
-    need = rows[i].qty_in;
+  for(let i = main.length-1; i >= 0; i--){
+    main[i].qty_out = need;
+    main[i].qty_in = keep > 0 ? need/keep : need;
+    need = main[i].qty_in;
   }
+  // ขั้นตอนแยกไม่ได้อยู่ในโซ่นี้ จึงเผื่อของเสียชั้นเดียวจากยอดที่ต้องการ
+  extra.forEach(r=>{ r.qty_out = qty; r.qty_in = keep > 0 ? qty/keep : qty; });
 
-  let cum = 0;
-  rows.forEach(r=>{
+  function fillRow(r){
     const {rate, src} = planStepRate(r.step);
     r.rate = rate;
     r.rate_src = src;
     r.stations = planStepStations(r.step);
     r.hours = (rate && rate > 0) ? r.qty_in/(rate*r.stations) : null;
     r.days = r.hours != null ? r.hours/hpd : null;
+    r.cost = (r.step.cost_per_pc != null) ? r.qty_in*r.step.cost_per_pc : null;
+  }
+
+  let cum = 0;
+  main.forEach(r=>{
+    fillRow(r);
     r.start_day = cum;
     if(r.days != null) cum += r.days;
     r.end_day = cum;
-    r.cost = (r.step.cost_per_pc != null) ? r.qty_in*r.step.cost_per_pc : null;
+    r.start_iso = r.days != null ? planAddWorkingDays(startIso, Math.floor(r.start_day)) : null;
+    r.end_iso = r.days != null ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1)) : null;
   });
+  // ขั้นตอนแยกทำเมื่อไรก็ได้ จึงไม่ผูกวันที่ให้ ไทม์ไลน์วาดจากวันที่ 0 เท่านั้น
+  extra.forEach(r=>{ fillRow(r); r.start_day = 0; r.end_day = r.days || 0; r.start_iso = null; r.end_iso = null; });
 
-  const startIso = planState.startIso || planTodayIso();
-  rows.forEach(r=>{
-    if(r.days == null){ r.start_iso = null; r.end_iso = null; return; }
-    r.start_iso = planAddWorkingDays(startIso, Math.floor(r.start_day));
-    r.end_iso = planAddWorkingDays(startIso, Math.max(0, Math.ceil(r.end_day)-1));
-  });
-
-  const totalHours = rows.reduce((s,r)=> s + (r.hours||0), 0);
-  const totalCost = rows.reduce((s,r)=> s + (r.cost||0), 0);
-  const missingRate = rows.filter(r=> r.rate == null).length;
+  const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
+  const mainHours = sum(main,'hours'), extraHours = sum(extra,'hours');
+  const mainCost = sum(main,'cost'), extraCost = sum(extra,'cost');
+  const rows = main.concat(extra);
+  // คอขวดคิดจากสายหลัก เพราะเป็นตัวกำหนดวันที่เสร็จ ขั้นตอนแยกไม่ได้ขวางสายการผลิต
   let bottleneck = null;
-  rows.forEach(r=>{ if(r.hours != null && (!bottleneck || r.hours > bottleneck.hours)) bottleneck = r; });
+  (main.length ? main : extra).forEach(r=>{ if(r.hours != null && (!bottleneck || r.hours > bottleneck.hours)) bottleneck = r; });
 
   return {
-    rows, startIso, qty, hpd,
-    startQty: rows.length ? rows[0].qty_in : qty,
-    totalHours,
-    totalDays: totalHours/hpd,
-    totalCost,
-    finishIso: rows.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : startIso,
-    missingRate,
+    rows, main, extra, startIso, qty, hpd,
+    startQty: main.length ? main[0].qty_in : (extra.length ? extra[0].qty_in : qty),
+    mainHours, extraHours, mainCost,
+    totalHours: mainHours + extraHours,
+    mainDays: mainHours/hpd,
+    totalDays: (mainHours + extraHours)/hpd,
+    totalCost: mainCost + extraCost,
+    finishIso: main.length ? planAddWorkingDays(startIso, Math.max(0, Math.ceil(cum)-1)) : startIso,
+    missingRate: rows.filter(r=> r.rate == null).length,
     bottleneck
   };
 }
 
-const PLAN_RANK_LABEL = {standard:'· 標準順序', variant:'· 接續主站別', data:'· 依資料推估', none:'· 順序未知'};
+const PLAN_RANK_LABEL = {standard:'· 標準順序', standalone:'· 獨立站別'};
 
 const PLAN_RATE_SRC_LABEL = {
   rate_target_95: '取自目標 95%',
@@ -1808,15 +1794,18 @@ function renderPlanner(){
 
   const plan = computePlan();
   countEl.textContent = String(plan.rows.length);
+  const split = plan.extra.length > 0;   // มีขั้นตอนแยกที่ไม่อยู่ในสายหลัก
 
   const kpis = [
     {label:'起始投入量', value:fmtNum(plan.startQty), unit:'件',
      sub:'為取得良品 %s 件（不良預留 %p%）'.replace('%s', fmtNum(plan.qty)).replace('%p', fmtNum(planState.scrapPct,1)), cls:''},
-    {label:'所需總工時', value:fmtNum(plan.totalHours,1), unit:'小時', sub:'所有站別依序接續之合計', cls:''},
-    {label:'所需工作天', value:fmtNum(plan.totalDays,1), unit:'天',
-     sub:'以每日 %h 小時計'.replace('%h', fmtNum(plan.hpd,1)), cls:''},
+    {label:'所需總工時', value:fmtNum(plan.totalHours,1), unit:'小時',
+     sub: split ? '主線 %m 小時 + 獨立站別 %e 小時'.replace('%m', fmtNum(plan.mainHours,1)).replace('%e', fmtNum(plan.extraHours,1))
+                : '所有站別依序接續之合計', cls:''},
+    {label:'所需工作天', value:fmtNum(plan.mainDays,1), unit:'天',
+     sub:'以每日 %h 小時計'.replace('%h', fmtNum(plan.hpd,1)) + (split ? '．不含獨立站別' : ''), cls:''},
     {label:'預計完成', value:planFmtDate(plan.finishIso), unit:'', textValue:true,
-     sub:'開工 %d · 跳過週日'.replace('%d', planFmtDate(plan.startIso)), cls:''},
+     sub:'開工 %d · 跳過週日'.replace('%d', planFmtDate(plan.startIso)) + (split ? '．不含獨立站別' : ''), cls:''},
     {label:'工資概估', value:fmtNum(plan.totalCost,0), unit:'฿', sub:'數量 × 歷史單件成本', cls:''},
     {label:'瓶頸站別', value: plan.bottleneck ? escapeHtml(translateDept(plan.bottleneck.step.dept)) : '—', unit:'', textValue:true,
      sub: plan.bottleneck ? '耗時 %h 小時，為最久'.replace('%h', fmtNum(plan.bottleneck.hours,1)) : '—', cls:'bad'},
@@ -1829,38 +1818,61 @@ function renderPlanner(){
       <div class="sub ${k.cls}">${k.sub}</div>
     </div>`).join('') + `</div>`;
 
-  const bodyHtml = plan.rows.map((r,i)=>{
+  // แถวของสายหลักเลื่อนลำดับได้ ส่วนขั้นตอนแยกไม่มีลำดับให้เลื่อน
+  const rowHtml = (r, no, lastNo)=>{
     const c = getDeptColor(r.step.dept);
+    const dept = escapeHtml(r.step.dept).replace(/"/g,'&quot;');
     const srcLabel = r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src] || '') : '無資料';
+    const seq = no
+      ? `<span class="plan-seq-no">${no}</span>
+          <button class="plan-move" data-move="up" data-idx="${no-1}" title="上移" ${no===1?'disabled':''}>▲</button>
+          <button class="plan-move" data-move="down" data-idx="${no-1}" title="下移" ${no===lastNo?'disabled':''}>▼</button>`
+      : `<span class="plan-seq-no">—</span>`;
     return `<tr>
-      <td>
-        <div class="plan-seq">
-          <span class="plan-seq-no">${i+1}</span>
-          <button class="plan-move" data-move="up" data-idx="${i}" title="上移" ${i===0?'disabled':''}>▲</button>
-          <button class="plan-move" data-move="down" data-idx="${i}" title="下移" ${i===plan.rows.length-1?'disabled':''}>▼</button>
-        </div>
-      </td>
+      <td><div class="plan-seq">${seq}</div></td>
       <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(translateDept(r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">僅部分尺寸的球</div>' : ''}</td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
+        <input class="plan-cell-input" type="number" min="0" step="1" data-field="rate" data-dept="${dept}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
       </td>
       <td class="num">
-        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-dept="${escapeHtml(r.step.dept).replace(/"/g,'&quot;')}" value="${r.stations}">
+        <input class="plan-cell-input" type="number" min="1" step="1" data-field="stations" data-dept="${dept}" value="${r.stations}">
       </td>
       <td class="num mono">${fmtNum(r.qty_in)}</td>
       <td class="num mono">${r.hours != null ? fmtNum(r.hours,2) : '—'}</td>
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono">${r.start_iso ? planFmtDate(r.start_iso) + ' → ' + planFmtDate(r.end_iso) : '—'}</td>
       <td class="num mono">${r.cost != null ? fmtNum(r.cost,0) : '—'}</td>
-      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' || r.step.rank_src === 'variant' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || PLAN_RANK_LABEL.none}</div></td>
+      <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
     </tr>`;
-  }).join('');
+  };
+
+  const mainBody = plan.main.map((r,i)=> rowHtml(r, i+1, plan.main.length)).join('');
+  const extraBody = split
+    ? `<tr class="plan-sep"><td colspan="10">獨立站別 — 不在主線順序中，故不排定日期，也不計入完成日</td></tr>` + plan.extra.map(r=> rowHtml(r, 0, 0)).join('')
+    : '';
+  const totalRows = (split ? `
+            <tr class="plan-tot">
+              <td colspan="5">主線合計</td>
+              <td class="num mono">${fmtNum(plan.mainHours,2)}</td>
+              <td class="num mono">${fmtNum(plan.mainDays,2)}</td>
+              <td class="mono">${planFmtDate(plan.startIso)} → ${planFmtDate(plan.finishIso)}</td>
+              <td class="num mono">${fmtNum(plan.mainCost,0)}</td>
+              <td></td>
+            </tr>` : '') + `
+            <tr class="plan-tot">
+              <td colspan="5">合計</td>
+              <td class="num mono">${fmtNum(plan.totalHours,2)}</td>
+              <td class="num mono">${fmtNum(plan.totalDays,2)}</td>
+              <td class="mono">${split ? '—' : planFmtDate(plan.startIso) + ' → ' + planFmtDate(plan.finishIso)}</td>
+              <td class="num mono">${fmtNum(plan.totalCost,0)}</td>
+              <td></td>
+            </tr>`;
 
   const tableHtml = `
     <div class="panel table-panel">
       <h2>生產站別</h2>
-      <div class="panel-note">速率與並行機台數可直接於表格修改（按 Enter 或點擊他處即重新計算）— 按 ▲▼ 可調整站別順序</div>
+      <div class="panel-note">速率與並行機台數可直接於表格修改（按 Enter 或點擊他處即重新計算）— ▲▼ 僅調整主線站別的順序</div>
       <div class="table-wrap">
         <table id="planStepTable">
           <thead>
@@ -1877,49 +1889,45 @@ function renderPlanner(){
               <th class="num">參考（筆）</th>
             </tr>
           </thead>
-          <tbody>${bodyHtml}
-            <tr class="plan-tot">
-              <td colspan="5">合計</td>
-              <td class="num mono">${fmtNum(plan.totalHours,2)}</td>
-              <td class="num mono">${fmtNum(plan.totalDays,2)}</td>
-              <td class="mono">${planFmtDate(plan.startIso)} → ${planFmtDate(plan.finishIso)}</td>
-              <td class="num mono">${fmtNum(plan.totalCost,0)}</td>
-              <td></td>
-            </tr>
+          <tbody>${mainBody}${extraBody}${totalRows}
           </tbody>
         </table>
       </div>
     </div>`;
 
   const span = Math.max(plan.rows.reduce((m,r)=> Math.max(m, r.end_day||0), 0), 0.0001);
+  const tlRow = (r, standalone)=>{
+    const c = getDeptColor(r.step.dept);
+    const name = escapeHtml(translateDept(r.step.dept));
+    if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
+    const left = (r.start_day/span)*100;
+    const width = Math.max((r.days/span)*100, 1.2);
+    return `<div class="plan-tl-row">
+      <div class="plan-tl-name">${name}</div>
+      <div class="plan-tl-track">
+        <div class="plan-tl-bar${standalone ? ' standalone' : ''}" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};">${fmtNum(r.days,2)} 天</div>
+      </div>
+    </div>`;
+  };
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>預估時程</h2>
-      <div class="panel-note">長條長度＝該站別所需天數，依表格順序接續排列（假設逐站進行、不重疊）</div>
+      <div class="panel-note">長條長度＝該站別所需天數，主線依順序接續排列（假設逐站進行、不重疊）</div>
       <div class="plan-timeline">
-        ${plan.rows.map(r=>{
-          const c = getDeptColor(r.step.dept);
-          if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${escapeHtml(translateDept(r.step.dept))}</div><div class="plan-tl-track"></div></div>`;
-          const left = (r.start_day/span)*100;
-          const width = Math.max((r.days/span)*100, 1.2);
-          return `<div class="plan-tl-row">
-            <div class="plan-tl-name">${escapeHtml(translateDept(r.step.dept))}</div>
-            <div class="plan-tl-track">
-              <div class="plan-tl-bar" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};">${fmtNum(r.days,2)} 天</div>
-            </div>
-          </div>`;
-        }).join('')}
+        ${plan.main.map(r=> tlRow(r, false)).join('')}
+        ${split ? `<div class="plan-tl-sep">獨立站別 — 隨時可做、不接續於任何站別，故一律自起點繪製</div>` + plan.extra.map(r=> tlRow(r, true)).join('') : ''}
       </div>
     </div>`;
 
-  const warnHtml = plan.missingRate
-    ? `<li class="plan-warn">部分站別在歷史資料中沒有生產速率 — 請於表格中自行輸入，否則該站別不會計入工時與日期</li>` : '';
+  const extraNote = split ? `<li><b>獨立站別</b> — 不在主線順序中的部門視為獨立站別，不接續於任何站別，故工時與工資另計、不良僅預留一層，且不計入主線的完成日</li>` : '';
+  const warnHtml = plan.missingRate ? `<li class="plan-warn">部分站別在歷史資料中沒有生產速率 — 請於表格中自行輸入，否則該站別不會計入工時與日期</li>` : '';
   const assumeHtml = `
     <div class="panel plan-assume">
       <h2>計算所用之假設</h2>
       <div class="panel-note">所有數字皆為依歷史資料所做的概估，並非已確認的生產計畫</div>
       <ul>
-        <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改用產線標準順序：壓延 → 沖壓 → 砂紙 → 裁膠 → 上膠 → 研磨 → 研磨(粗) → 研磨(細) → 鑽孔；不在此順序中的部門則依歷史資料推估位置並加註標示 — 可用 ▲▼ 自行調整</li>
+        <li><b>站別順序</b> — 試算表中並無站別順序（step order）欄位，系統改用主線標準順序：壓延 → 沖壓 → 砂紙 → 裁膠 → 上膠 → 研磨 → 研磨(粗) → 研磨(細) → 鑽孔；其中研磨(粗)/(細) 僅部分尺寸的球需要 — 可用 ▲▼ 自行調整</li>
+        ${extraNote}
         <li><b>生產速率</b> — 取歷史目標值的中位數（件/小時），或實際速率＝實際產量合計 ÷ 機台工時合計，依上方所選基準</li>
         <li><b>工時</b> — 工時＝數量 ÷（速率 × 機台數），僅計機台運轉時間，不含換模、待料與站間搬運</li>
         <li><b>日期</b> — 依所填每日工時換算，並依工廠行事曆跳過週日</li>
@@ -1999,7 +2007,8 @@ setupSearchableSelect({
     if(!btn) return;
     const i = parseInt(btn.getAttribute('data-idx'), 10);
     const j = btn.getAttribute('data-move') === 'up' ? i-1 : i+1;
-    if(j < 0 || j >= planState.steps.length) return;
+    const mainLen = planState.steps.filter(x=> x.rank != null).length;
+    if(j < 0 || j >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
     const s = planState.steps;
     [s[i], s[j]] = [s[j], s[i]];
     planState.order = s.map(x=>x.dept);
