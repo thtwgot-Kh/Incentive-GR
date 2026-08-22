@@ -2100,10 +2100,13 @@ function renderPlanner(){
     if(r.days == null) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
     const left = (r.start_day/span)*100;
     const width = Math.max((r.days/span)*100, 1.2);
+    const material = cleanMaterialDisplay(r.step.material || '') || 'ไม่มีข้อมูลวัตถุดิบ';
+    const tip = `${r.step.dept} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน`
+      + (r.start_iso ? `\n${planFmtDate(r.start_iso)} → ${planFmtDate(r.end_iso)}` : '');
     return `<div class="plan-tl-row">
       <div class="plan-tl-name">${name}</div>
       <div class="plan-tl-track">
-        <div class="plan-tl-bar${standalone ? ' standalone' : ''}" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};">${fmtNum(r.days,2)} วัน</div>
+        <div class="plan-tl-bar${standalone ? ' standalone' : ''}" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};" title="${escapeHtml(tip).replace(/"/g,'&quot;')}">${fmtNum(r.days,2)} วัน</div>
       </div>
     </div>`;
   };
