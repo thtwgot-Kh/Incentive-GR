@@ -1774,7 +1774,7 @@ function buildPlanSteps(item, userOrder, manualDepts){
     if(r.target_100) s.t100.push(r.target_100);
   });
 
-  const steps = [...byKey.values()];
+  let steps = [...byKey.values()];
   steps.forEach(s=>{
     let bestMaterial = '', bestCount = -1;
     s.materialCounts.forEach((count, mat)=>{ if(count > bestCount){ bestCount = count; bestMaterial = mat; } });
@@ -1787,6 +1787,17 @@ function buildPlanSteps(item, userOrder, manualDepts){
     s.rank = rank.rank;
     s.rank_src = rank.src;
   });
+
+  // ชื่อวัตถุดิบที่ต่างกันแค่รหัสสี/คำสี (เช่น ...ดำ กับ ...แดง) จะเหลือข้อความเดียวกันบนจอ
+  // เพราะตัดสีออกตอนแสดงผล (cleanMaterialDisplay) — ถ้าปล่อยไว้จะเห็นขั้นตอนเดียวกันซ้ำหลายแถวคนละอัตรา
+  // ทั้งที่อยากได้เป้าการผลิตเดียวต่อชิ้นส่วน จึงเหลือไว้เฉพาะกลุ่มที่มีข้อมูลอ้างอิง (จำนวนบรรทัด) มากที่สุด
+  const byDisplayKey = new Map();
+  steps.forEach(s=>{
+    const dispKey = s.dept + '||' + cleanMaterialDisplay(s.material).trim().toLowerCase();
+    const prev = byDisplayKey.get(dispKey);
+    if(!prev || s.n > prev.n) byDisplayKey.set(dispKey, s);
+  });
+  steps = [...byDisplayKey.values()];
 
   // เติมขั้นตอนที่ผู้ใช้เพิ่มเอง — ข้ามหน่วยงานที่มีข้อมูลย้อนหลังจริงอยู่แล้ว (ไม่ว่าจะกี่ชิ้นส่วนก็ตาม)
   const usedDeptsForManual = new Set(steps.map(s=> s.dept));
