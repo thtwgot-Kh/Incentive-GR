@@ -516,7 +516,15 @@
     background:var(--surface-2);border:1px solid var(--border);border-radius:10px;
     padding:6px;max-height:260px;overflow-y:auto;z-index:60;
     box-shadow:0 12px 30px rgba(0,0,0,.45);
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
   }
+  .ss-panel::-webkit-scrollbar{width:10px;}
+  .ss-panel::-webkit-scrollbar-track{background:transparent;}
+  .ss-panel::-webkit-scrollbar-thumb{
+    background:var(--border);border-radius:8px;border:3px solid var(--surface-2);
+  }
+  .ss-panel::-webkit-scrollbar-thumb:hover{background:var(--text-faint);}
   .ss-panel.open{display:block;}
   .ss-option{
     padding:8px 10px;border-radius:6px;font-size:12.8px;color:var(--text);
@@ -536,8 +544,21 @@
     display:none;position:fixed;background:var(--surface-2);border:1px solid var(--border);
     border-radius:10px;padding:6px;max-height:260px;overflow-y:auto;z-index:200;
     box-shadow:0 12px 30px rgba(0,0,0,.45);
+    /* ลิสต์ยาวต้องเลื่อนด้วยนิ้วได้ และต้องไม่ลากหน้าเว็บด้านหลังไปด้วย (ไม่งั้นลิสต์เด้งปิด) */
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
   }
+  /* แถบเลื่อนของ dropdown ให้เห็นตลอด — ค่าเริ่มต้นของ macOS/มือถือจะซ่อนไว้จนกว่าจะเลื่อน
+     ทำให้ดูเหมือนลิสต์ไม่มีรายการต่อทั้งที่ยังมี */
+  .plan-item-dropdown::-webkit-scrollbar{width:10px;}
+  .plan-item-dropdown::-webkit-scrollbar-track{background:transparent;}
+  .plan-item-dropdown::-webkit-scrollbar-thumb{
+    background:var(--border);border-radius:8px;border:3px solid var(--surface-2);
+  }
+  .plan-item-dropdown::-webkit-scrollbar-thumb:hover{background:var(--text-faint);}
   .plan-item-dropdown.open{display:block;}
+  /* แถวในลิสต์ต้องสูงพอให้นิ้วแตะโดนบนมือถือ */
+  .plan-item-dropdown .ss-option{padding:10px;min-height:38px;display:flex;align-items:center;}
   /* Production planner (คำนวณแผนผลิต) */
   .plan-num{min-width:130px;width:100%;text-align:right;font-family:var(--mono);}
   .plan-num::-webkit-calendar-picker-indicator{filter:invert(.7);}
@@ -1443,16 +1464,29 @@ function setupSearchableSelect({inputId, panelId, clearId, getOptions, onSelect,
   });
   input.addEventListener('focus', renderPanel);
 
-  panel.addEventListener('mousedown', (e)=>{
-    const opt = e.target.closest('.ss-option');
-    if(!opt) return;
-    e.preventDefault();
+  function choose(opt){
     const value = opt.getAttribute('data-value');
     input.value = value;
     store[stateKey] = value.trim().toLowerCase();
     panel.classList.remove('open');
     clearBtn.classList.add('show');
     notify();
+  }
+
+  panel.addEventListener('mousedown', (e)=>{
+    if(e.button !== 0) return;
+    const opt = e.target.closest('.ss-option');
+    if(!opt) return;
+    e.preventDefault();  // กันไม่ให้ช่องกรอกเสียโฟกัสก่อนอ่านค่าที่แตะ
+    choose(opt);
+  });
+  // แตะบนมือถือ: บางเบราว์เซอร์ข้าม mousedown จำลองหลังนิ้วขยับเล็กน้อย จึงรับที่ click อีกทาง
+  // ถ้า mousedown จัดการไปแล้วลิสต์จะปิดไปก่อน click จึงไม่เลือกซ้ำ
+  panel.addEventListener('click', (e)=>{
+    if(!panel.classList.contains('open')) return;
+    const opt = e.target.closest('.ss-option');
+    if(!opt) return;
+    choose(opt);
   });
 
   clearBtn.addEventListener('click', ()=>{
@@ -1699,12 +1733,63 @@ function planCommitItemValue(job, raw){
 // ไม่แสดงเป็นลิสต์จริง แต่โชว์แค่แถบ QuickType สั้นๆ เหนือคีย์บอร์ด) ----------
 function planItemDropdownEl(){ return document.getElementById('planItemDropdown'); }
 
+// ช่องกรอกที่ dropdown กำลังผูกอยู่ — เก็บไว้เพื่อขยับลิสต์ตามช่องตอนหน้าเลื่อน/คีย์บอร์ดเปิด-ปิด
+let planDropdownInput = null;
+
+const PLAN_DD_GAP = 4;      // ระยะห่างระหว่างช่องกรอกกับลิสต์
+const PLAN_DD_EDGE = 8;     // ระยะกันชนขอบจอ
+const PLAN_DD_MIN_H = 132;  // ความสูงต่ำสุดที่ยังพออ่านลิสต์ได้ ต่ำกว่านี้ให้พลิกไปด้านบนแทน
+const PLAN_DD_MAX_H = 280;
+
 function planPositionItemDropdown(input){
   const panel = planItemDropdownEl();
+  if(!panel || !input) return;
   const r = input.getBoundingClientRect();
-  panel.style.left = r.left + 'px';
-  panel.style.top = (r.bottom + 4) + 'px';
-  panel.style.width = r.width + 'px';
+
+  // iOS/Android: คีย์บอร์ดที่เด้งขึ้นมาไม่ได้ย่อ window.innerHeight แต่ย่อ visualViewport
+  // ถ้าคิดที่ว่างจาก innerHeight ลิสต์จะถูกวางใต้คีย์บอร์ด มองไม่เห็นและเลื่อนไปหาไม่ได้
+  const vv = window.visualViewport;
+  const layoutH = window.innerHeight || document.documentElement.clientHeight;
+  const layoutW = window.innerWidth || document.documentElement.clientWidth;
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewBottom = vv ? (vv.offsetTop + vv.height) : layoutH;
+  const viewLeft = vv ? vv.offsetLeft : 0;
+  const viewRight = vv ? (vv.offsetLeft + vv.width) : layoutW;
+
+  const spaceBelow = viewBottom - r.bottom - PLAN_DD_GAP - PLAN_DD_EDGE;
+  const spaceAbove = r.top - viewTop - PLAN_DD_GAP - PLAN_DD_EDGE;
+  const flipUp = spaceBelow < PLAN_DD_MIN_H && spaceAbove > spaceBelow;
+  // จำกัดความสูงตามที่ว่างจริง ลิสต์จึงมีแถบเลื่อนของตัวเองเสมอ แทนที่จะยาวทะลุจอจนรายการท้ายๆ กดไม่ถึง
+  const maxH = Math.max(PLAN_DD_MIN_H, Math.min(PLAN_DD_MAX_H, flipUp ? spaceAbove : spaceBelow));
+
+  const width = Math.min(Math.max(r.width, 200), Math.max(200, viewRight - viewLeft - PLAN_DD_EDGE*2));
+  const left = Math.min(Math.max(r.left, viewLeft + PLAN_DD_EDGE), Math.max(viewLeft + PLAN_DD_EDGE, viewRight - PLAN_DD_EDGE - width));
+
+  panel.style.width = width + 'px';
+  panel.style.left = left + 'px';
+  panel.style.maxHeight = maxH + 'px';
+  if(flipUp){
+    panel.style.top = 'auto';
+    panel.style.bottom = Math.max(PLAN_DD_EDGE, layoutH - r.top + PLAN_DD_GAP) + 'px';
+  }else{
+    panel.style.bottom = 'auto';
+    panel.style.top = (r.bottom + PLAN_DD_GAP) + 'px';
+  }
+}
+
+/** หน้าเลื่อน/จอเปลี่ยนขนาด/คีย์บอร์ดเปิด-ปิด — ขยับลิสต์ให้ตามช่องกรอก แทนที่จะปิดทิ้ง
+ *  ปิดเฉพาะตอนช่องกรอกหายไปจากหน้าหรือถูกเลื่อนพ้นจอ ไม่งั้นลิสต์จะค้างอยู่คนละที่กับช่อง */
+function planSyncItemDropdown(){
+  const panel = planItemDropdownEl();
+  if(!panel || !panel.classList.contains('open')) return;
+  const input = planDropdownInput;
+  if(!input || !input.isConnected){ planCloseItemDropdown(); return; }
+  const vv = window.visualViewport;
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewBottom = vv ? (vv.offsetTop + vv.height) : (window.innerHeight || document.documentElement.clientHeight);
+  const r = input.getBoundingClientRect();
+  if(r.bottom < viewTop || r.top > viewBottom){ planCloseItemDropdown(); return; }
+  planPositionItemDropdown(input);
 }
 
 function planRenderItemDropdown(input){
@@ -1726,13 +1811,50 @@ function planRenderItemDropdown(input){
     panel.innerHTML = html;
   }
   panel.dataset.forJob = input.getAttribute('data-job');
-  planPositionItemDropdown(input);
+  planDropdownInput = input;
+  // ต้องเปิดก่อน แล้วค่อยวัด/ตั้ง scrollTop — ตอนยังซ่อนอยู่กล่องยังไม่มีขนาดจริงให้คำนวณ
   panel.classList.add('open');
+  panel.scrollTop = 0;
+  planPositionItemDropdown(input);
 }
 
 function planCloseItemDropdown(){
   const panel = planItemDropdownEl();
   if(panel) panel.classList.remove('open');
+  planDropdownInput = null;
+}
+
+/** เลื่อนไฮไลต์ในลิสต์ด้วยลูกศรขึ้น/ลง แล้วเลื่อนลิสต์ตามให้เห็นรายการที่ไฮไลต์อยู่เสมอ */
+function planMoveItemHighlight(dir){
+  const panel = planItemDropdownEl();
+  if(!panel) return;
+  const opts = [...panel.querySelectorAll('.ss-option')];
+  if(!opts.length) return;
+  const cur = opts.findIndex(o=> o.classList.contains('highlight'));
+  const next = cur === -1 ? (dir > 0 ? 0 : opts.length-1)
+                          : Math.min(opts.length-1, Math.max(0, cur + dir));
+  opts.forEach(o=> o.classList.remove('highlight'));
+  opts[next].classList.add('highlight');
+  const oR = opts[next].getBoundingClientRect(), pR = panel.getBoundingClientRect();
+  if(oR.top < pR.top) panel.scrollTop -= (pR.top - oR.top);
+  else if(oR.bottom > pR.bottom) panel.scrollTop += (oR.bottom - pR.bottom);
+}
+
+/** เลือกรายการหนึ่งจากลิสต์ — ใช้ร่วมกันทั้งการคลิกเมาส์ แตะบนมือถือ และกด Enter */
+function planChooseItemOption(opt){
+  const panel = planItemDropdownEl();
+  if(!panel || !opt) return;
+  const job = planFindJob(parseInt(panel.dataset.forJob, 10));
+  if(!job) return;
+  const value = opt.getAttribute('data-value');
+  // เขียนค่าที่เลือกกลับเข้าช่องกรอกก่อนวาดแถวใหม่ — ตอนช่องเดิมถูกถอดออกจากหน้าขณะยังโฟกัสอยู่
+  // เบราว์เซอร์บางตัวยิง change ตามมาด้วยข้อความที่พิมพ์ค้างไว้ แล้วทับค่าที่เพิ่งเลือกไป
+  if(planDropdownInput) planDropdownInput.value = value;
+  planCommitItemValue(job, value);
+  planCloseItemDropdown();
+  if(planState.computed) planState.dirty = true;
+  renderPlanRows();
+  renderPlanner();
 }
 
 /** โครงขั้นตอนเปล่าสำหรับ Item ใหม่ที่ยังไม่มีข้อมูลย้อนหลัง — ผู้ใช้กรอกอัตราเอง */
@@ -2786,26 +2908,63 @@ function refreshPlanner(){
     if(!inp) return;
     planRenderItemDropdown(inp);
   });
+  // เลื่อนไฮไลต์/เลือก/ปิด ด้วยคีย์บอร์ด สำหรับคนที่ใช้เครื่องคอม
+  rowBox.addEventListener('keydown', (e)=>{
+    const inp = e.target.closest('.plan-row-item');
+    if(!inp) return;
+    const panel = planItemDropdownEl();
+    const open = panel && panel.classList.contains('open');
+    if(e.key === 'Escape'){
+      if(open){ e.preventDefault(); planCloseItemDropdown(); }
+      return;
+    }
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if(!open){ planRenderItemDropdown(inp); return; }
+      planMoveItemHighlight(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if(e.key === 'Enter' && open){
+      const cur = panel.querySelector('.ss-option.highlight');
+      if(cur){ e.preventDefault(); planChooseItemOption(cur); }
+    }
+  });
   const itemDropdown = document.getElementById('planItemDropdown');
+  // เมาส์: รับที่ mousedown แล้วกันโฟกัสหลุดจากช่องกรอก
+  // (ห้าม preventDefault ที่ touchstart/pointerdown ไม่งั้นจะเลื่อนลิสต์ด้วยนิ้วไม่ได้)
   itemDropdown.addEventListener('mousedown', (e)=>{
+    if(e.button !== 0) return;
     const opt = e.target.closest('.ss-option');
     if(!opt) return;
-    e.preventDefault(); // กันไม่ให้ช่องกรอกเสียโฟกัสก่อนอ่านค่าที่แตะ
-    const job = planFindJob(parseInt(itemDropdown.dataset.forJob, 10));
-    if(!job) return;
-    planCommitItemValue(job, opt.getAttribute('data-value'));
-    planCloseItemDropdown();
-    if(planState.computed) planState.dirty = true;
-    renderPlanRows();
-    renderPlanner();
+    e.preventDefault();
+    planChooseItemOption(opt);
+  });
+  // แตะบนมือถือ: บางเบราว์เซอร์ข้าม mousedown จำลองหลังนิ้วขยับเล็กน้อย จึงรับที่ click อีกทาง
+  // ถ้า mousedown จัดการไปแล้วลิสต์จะปิดไปก่อน click จึงไม่เลือกซ้ำ
+  itemDropdown.addEventListener('click', (e)=>{
+    if(!itemDropdown.classList.contains('open')) return;
+    const opt = e.target.closest('.ss-option');
+    if(!opt) return;
+    planChooseItemOption(opt);
   });
   document.addEventListener('click', (e)=>{
     if(!itemDropdown.classList.contains('open')) return;
     if(itemDropdown.contains(e.target) || e.target.closest('.plan-row-item')) return;
     planCloseItemDropdown();
   });
-  window.addEventListener('scroll', ()=> planCloseItemDropdown(), true);
-  window.addEventListener('resize', planCloseItemDropdown);
+  // เดิมปิดลิสต์ทุกครั้งที่มี scroll ที่ไหนก็ได้ — การเลื่อนดูรายการในลิสต์เองก็เข้าเงื่อนไขนี้
+  // ลิสต์จึงเด้งปิดทันทีที่เริ่มเลื่อน ตอนนี้ข้ามการเลื่อนที่เกิดในลิสต์ ส่วนการเลื่อนหน้าให้ขยับตามช่องกรอก
+  window.addEventListener('scroll', (e)=>{
+    const t = e.target;
+    if(t && t.nodeType === 1 && (t === itemDropdown || itemDropdown.contains(t))) return;
+    planSyncItemDropdown();
+  }, true);
+  // คีย์บอร์ดมือถือเด้งขึ้นมาตอนโฟกัสช่องกรอกก็นับเป็น resize — เดิมจึงปิดลิสต์ที่เพิ่งเปิดทิ้งทันที
+  window.addEventListener('resize', planSyncItemDropdown);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', planSyncItemDropdown);
+    window.visualViewport.addEventListener('scroll', planSyncItemDropdown);
+  }
 
   // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
   const box = document.getElementById('planResult');
