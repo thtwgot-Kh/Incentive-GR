@@ -1637,6 +1637,14 @@ function planShortMaterial(text){
   if(!text) return '';
   return text.length > 46 ? text.slice(0,46).trim() + '…' : text;
 }
+/** ปรับข้อความชื่อวัตถุดิบให้เทียบเท่ากันได้ ตัดแค่ช่องว่างซ้ำ/ช่องว่างรอบวงเล็บ-เครื่องหมาย
+ *  ไม่แตะตัวเลข/รหัส เพื่อไม่ให้ไซส์หรือรุ่นที่ต่างกันจริงถูกรวมกันผิดๆ (เช่น 95mm กับ 90mm ต้องยังแยกกัน) */
+function planNormalizeMaterialKey(material){
+  return (material || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([()+\-])\s*/g, '$1');
+}
 
 function planItemOptions(){
   return [...new Set(RAW.filter(r=> r.item_code && r.dept).map(r=>r.item_code))].sort();
@@ -1664,13 +1672,16 @@ function buildPlanSteps(item, userOrder, manualDepts){
   const rows = item ? RAW.filter(r=> (r.item_code||'') === item && r.dept) : [];
   const byKey = new Map();
   rows.forEach(r=>{
-    const material = (r.material || '').trim();
-    const key = planStepKey(r.dept, material);
+    const materialRaw = (r.material || '').trim();
+    const key = planStepKey(r.dept, planNormalizeMaterialKey(materialRaw));
     let s = byKey.get(key);
     if(!s){
-      s = {key, dept:r.dept, material, n:0, actual:0, hours:0, t95:[], t100:[]};
+      s = {key, dept:r.dept, materialCounts: new Map(), n:0, actual:0, hours:0, t95:[], t100:[]};
       byKey.set(key, s);
     }
+    // คำสะกด/เว้นวรรคของชื่อวัตถุดิบต่างกันเล็กน้อยนับเป็นชิ้นส่วนเดียวกัน (ดูกุญแจข้างบน)
+    // แต่ต้องเลือกชื่อไปแสดง จึงนับความถี่ไว้ แล้วใช้ชื่อที่พบบ่อยที่สุดเป็นตัวแทนของกลุ่ม
+    if(materialRaw) s.materialCounts.set(materialRaw, (s.materialCounts.get(materialRaw) || 0) + 1);
     s.n++;
     if(r.actual_pcs) s.actual += r.actual_pcs;
     if(r.machine_hours) s.hours += r.machine_hours;
@@ -1680,6 +1691,10 @@ function buildPlanSteps(item, userOrder, manualDepts){
 
   const steps = [...byKey.values()];
   steps.forEach(s=>{
+    let bestMaterial = '', bestCount = -1;
+    s.materialCounts.forEach((count, mat)=>{ if(count > bestCount){ bestCount = count; bestMaterial = mat; } });
+    s.material = bestMaterial;
+    delete s.materialCounts;
     s.rate_target_95 = planMedian(s.t95);
     s.rate_target_100 = planMedian(s.t100);
     s.rate_actual = s.hours > 0 ? s.actual / s.hours : null;
