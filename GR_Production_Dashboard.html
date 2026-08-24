@@ -2214,7 +2214,7 @@ async function planSaveCurrentPlan(){
   try{
     await planHistoryPost({action:'save', entry: planSnapshotCurrent()});
     await renderPlanHistoryList();
-    alert('บันทึกแผนนี้ไว้ในประวัติแล้ว (ซิงค์ผ่าน Google Sheet — เปิดเครื่องไหนที่ล็อกอินแล้วก็เห็นแผนนี้)');
+    alert('บันทึกเรียบร้อย');
   }catch(err){
     alert('บันทึกประวัติไม่สำเร็จ: ' + err.message);
   }finally{
