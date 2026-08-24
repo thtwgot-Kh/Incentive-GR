@@ -2154,19 +2154,34 @@ function planExportExcel(){
   planDownloadBlob(blob, `แผนผลิต_${safe}_${planTodayIso()}.xlsx`);
 }
 
-// ---------- ประวัติแผนผลิต (เก็บใน localStorage ของเบราว์เซอร์นี้ ไม่เกี่ยวกับ Google Sheet) ----------
-const PLAN_HISTORY_LS_KEY = 'gr_plan_history';
-const PLAN_HISTORY_MAX = 50;
+// ---------- ประวัติแผนผลิต (บันทึกที่ Google Sheet ผ่าน Apps Script — เห็นเหมือนกันทุกเครื่องที่ล็อกอิน) ----------
+let planHistoryCache = [];
 
-function planHistoryLoadAll(){
-  try{
-    const list = JSON.parse(localStorage.getItem(PLAN_HISTORY_LS_KEY) || '[]');
-    return Array.isArray(list) ? list : [];
-  }catch(e){ return []; }
+function planHistoryBaseUrl(){
+  return (document.getElementById('sheetUrlInput').value || '').trim()
+    || localStorage.getItem(LS_KEY)
+    || DEFAULT_SHEET_URL;
 }
-function planHistorySaveAll(list){
-  try{ localStorage.setItem(PLAN_HISTORY_LS_KEY, JSON.stringify(list)); }
-  catch(e){ alert('บันทึกประวัติไม่สำเร็จ (พื้นที่จัดเก็บของเบราว์เซอร์อาจเต็ม หรือถูกปิดใช้งาน)'); }
+async function planHistoryFetchAll(){
+  const base = planHistoryBaseUrl();
+  const sep = base.indexOf('?') === -1 ? '?' : '&';
+  const res = await fetch(base + sep + 'action=planHistory&key=' + encodeURIComponent(AUTH_HASH), {cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return Array.isArray(data) ? data : [];
+}
+// ไม่ตั้ง header 'Content-Type: application/json' เอง เพราะจะทำให้เบราว์เซอร์ส่ง
+// CORS preflight (OPTIONS) มาก่อน ซึ่ง Apps Script Web App ไม่รองรับ
+async function planHistoryPost(payload){
+  const res = await fetch(planHistoryBaseUrl(), {
+    method: 'POST',
+    body: JSON.stringify(Object.assign({key: AUTH_HASH}, payload))
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return data;
 }
 
 /** เก็บเฉพาะค่าที่ผู้ใช้กรอก/แก้เอง — ไม่เก็บผลคำนวณ เพราะสร้างใหม่จากข้อมูลย้อนหลังในชีตได้เสมอตอนโหลดกลับมา */
@@ -2188,17 +2203,23 @@ function planSnapshotCurrent(){
   };
 }
 
-/** ปุ่ม "บันทึกแผนนี้" — เก็บสถานะปัจจุบันเป็นรายการใหม่ในประวัติ */
-function planSaveCurrentPlan(){
+/** ปุ่ม "บันทึกแผนนี้" — เก็บสถานะปัจจุบันเป็นรายการใหม่ในประวัติ (ซิงค์ผ่าน Google Sheet) */
+async function planSaveCurrentPlan(){
   if(!planValidJobs().length){
     alert('กรอกรายการ Item ก่อนถึงจะบันทึกแผนได้');
     return;
   }
-  const list = planHistoryLoadAll();
-  list.unshift(planSnapshotCurrent());
-  planHistorySaveAll(list.slice(0, PLAN_HISTORY_MAX));
-  renderPlanHistoryList();
-  alert('บันทึกแผนนี้ไว้ในประวัติแล้ว (เก็บเฉพาะในเบราว์เซอร์นี้)');
+  const btn = document.getElementById('planSaveBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await planHistoryPost({action:'save', entry: planSnapshotCurrent()});
+    await renderPlanHistoryList();
+    alert('บันทึกแผนนี้ไว้ในประวัติแล้ว (ซิงค์ผ่าน Google Sheet — เปิดเครื่องไหนที่ล็อกอินแล้วก็เห็นแผนนี้)');
+  }catch(err){
+    alert('บันทึกประวัติไม่สำเร็จ: ' + err.message);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
 
 /** ใช้ร่วมกันโดยทั้ง "โหลดจากประวัติ" และ "เปิดจากลิงค์ที่แชร์มา" — วางค่าที่บันทึกไว้ลงในแผนปัจจุบัน */
@@ -2234,23 +2255,36 @@ function planApplySnapshotToState(entry){
 
 /** ปุ่ม "โหลด" ในประวัติ — แทนที่แผนปัจจุบันด้วยรายการที่บันทึกไว้ แล้วคำนวณใหม่ทันที */
 function planLoadHistoryEntry(id){
-  const entry = planHistoryLoadAll().find(e=> e.id === id);
+  const entry = planHistoryCache.find(e=> e.id === id);
   if(!entry) return;
   planApplySnapshotToState(entry);
   closePlanHistory();
   renderPlanRows();
   renderPlanner();
 }
-function planDeleteHistoryEntry(id){
-  planHistorySaveAll(planHistoryLoadAll().filter(e=> e.id !== id));
-  renderPlanHistoryList();
+async function planDeleteHistoryEntry(id){
+  try{
+    await planHistoryPost({action:'delete', id});
+    await renderPlanHistoryList();
+  }catch(err){
+    alert('ลบประวัติไม่สำเร็จ: ' + err.message);
+  }
 }
-function renderPlanHistoryList(){
+async function renderPlanHistoryList(){
   const box = document.getElementById('planHistoryList');
   if(!box) return;
-  const list = planHistoryLoadAll();
+  box.innerHTML = `<div class="plan-empty" style="padding:30px;">กำลังโหลดประวัติ…</div>`;
+  try{
+    planHistoryCache = await planHistoryFetchAll();
+  }catch(err){
+    box.innerHTML = `<div class="plan-empty" style="padding:30px;">โหลดประวัติไม่สำเร็จ: ${escapeHtml(err.message)}<br><button class="connect-btn ghost" id="planHistoryRetry" style="margin-top:10px;">ลองอีกครั้ง</button></div>`;
+    const retryBtn = document.getElementById('planHistoryRetry');
+    if(retryBtn) retryBtn.addEventListener('click', renderPlanHistoryList);
+    return;
+  }
+  const list = planHistoryCache;
   if(!list.length){
-    box.innerHTML = `<div class="plan-empty" style="padding:30px;">ยังไม่มีแผนที่บันทึกไว้ — กด “บันทึกแผนนี้” หลังคำนวณแผนเพื่อเก็บไว้ดูย้อนหลัง</div>`;
+    box.innerHTML = `<div class="plan-empty" style="padding:30px;">ยังไม่มีแผนที่บันทึกไว้ — กด “บันทึกแผนนี้” หลังคำนวณแผนเพื่อเก็บไว้ดูย้อนหลัง (ซิงค์ได้ทุกเครื่องที่ล็อกอิน)</div>`;
     return;
   }
   box.innerHTML = list.map(e=>{
@@ -2273,8 +2307,8 @@ function renderPlanHistoryList(){
   }).join('');
 }
 function openPlanHistory(){
-  renderPlanHistoryList();
   document.getElementById('planHistoryOverlay').style.display = 'flex';
+  renderPlanHistoryList();
 }
 function closePlanHistory(){
   document.getElementById('planHistoryOverlay').style.display = 'none';
@@ -2597,7 +2631,7 @@ function refreshPlanner(){
     if(loadBtn){ planLoadHistoryEntry(loadBtn.getAttribute('data-loadplan')); return; }
     const shareBtn = e.target.closest('[data-shareplan]');
     if(shareBtn){
-      const entry = planHistoryLoadAll().find(e=> e.id === shareBtn.getAttribute('data-shareplan'));
+      const entry = planHistoryCache.find(x=> x.id === shareBtn.getAttribute('data-shareplan'));
       if(entry) planCopyShareLink(entry);
       return;
     }

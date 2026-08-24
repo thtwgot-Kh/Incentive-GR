@@ -17,9 +17,14 @@
 
 // เลขเวอร์ชันของสคริปต์ ตอบกลับใน ?meta=1 เพื่อให้เช็คได้ทันทีว่า
 // deployment ที่ใช้งานอยู่เป็นโค้ดชุดนี้จริงหรือยังเป็นตัวเก่า
-var SCRIPT_VERSION = '2026-08-11';
+var SCRIPT_VERSION = '2026-08-24';
 
 var SHEET_NAME = 'GR';
+
+// ชีตเก็บประวัติแผนผลิต — สร้างอัตโนมัติถ้ายังไม่มี (ดู planHistory* ท้ายไฟล์)
+var PLAN_HISTORY_SHEET_NAME = 'PlanHistory';
+// จำนวนแผนสูงสุดที่เก็บไว้รวมกันทุกคน (เกินจะตัดอันเก่าสุดทิ้ง กันชีตโตไม่จำกัด)
+var PLAN_HISTORY_MAX = 200;
 
 // ต้องตรงกับค่า AUTH_HASH ในไฟล์ HTML (sha256 ของรหัสผ่านเข้าใช้งาน)
 var EXPECTED_KEY_HASH = 'fb8da96a6ac06bda69cddfc23e875dbad850043989033f66e42acbb5c6ce91c9';
@@ -53,6 +58,11 @@ function doGet(e) {
 
     if ((p.key || '') !== EXPECTED_KEY_HASH) {
       return jsonResponse({ error: 'Unauthorized: missing or invalid key' });
+    }
+
+    // ประวัติแผนผลิต — เก็บใน Sheet กลาง ใช้ร่วมกันได้ทุกเครื่องที่ใส่รหัสผ่านถูก
+    if (p.action === 'planHistory') {
+      return jsonResponse(planHistoryList());
     }
 
     var ss = openSpreadsheet();
@@ -175,6 +185,120 @@ function doGet(e) {
     return jsonResponse(out);
   } catch (err) {
     return jsonResponse({ error: err.message });
+  }
+}
+
+/**
+ * เขียนข้อมูล (บันทึก/ลบประวัติแผนผลิต) — ส่งมาเป็น POST body แบบ JSON เท่านั้น
+ * เช่น {"key": AUTH_HASH, "action": "save", "entry": {...}}
+ * ไม่ใช้ query string เหมือน doGet เพราะข้อมูลแผนอาจยาวเกินขีดจำกัดของ URL
+ *
+ * หมายเหตุ: ฝั่ง client ต้อง fetch() แบบไม่ตั้ง header 'Content-Type: application/json'
+ * เอง (ปล่อยเป็นค่าเริ่มต้น text/plain) ไม่งั้นเบราว์เซอร์จะส่ง CORS preflight
+ * (OPTIONS) มาก่อน ซึ่ง Apps Script Web App ไม่รองรับ
+ */
+function doPost(e) {
+  try {
+    var body = {};
+    try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (parseErr) { body = {}; }
+
+    if ((body.key || '') !== EXPECTED_KEY_HASH) {
+      return jsonResponse({ error: 'Unauthorized: missing or invalid key' });
+    }
+
+    if (body.action === 'save') {
+      return jsonResponse(planHistorySave(body.entry));
+    }
+    if (body.action === 'delete') {
+      return jsonResponse(planHistoryDelete(body.id));
+    }
+    return jsonResponse({ error: 'Unknown action: ' + body.action });
+  } catch (err) {
+    return jsonResponse({ error: err.message });
+  }
+}
+
+/** คืน Sheet เก็บประวัติแผนผลิต — สร้างพร้อมหัวตารางถ้ายังไม่มี */
+function getPlanHistorySheet(ss) {
+  var sheet = ss.getSheetByName(PLAN_HISTORY_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PLAN_HISTORY_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 3).setValues([['id', 'savedAt', 'json']]);
+  }
+  return sheet;
+}
+
+/** อ่านประวัติแผนทั้งหมด เรียงใหม่สุดก่อน */
+function planHistoryList() {
+  var ss = openSpreadsheet();
+  var sheet = getPlanHistorySheet(ss);
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  var values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var raw = values[i][2];
+    if (!raw) continue;
+    try { out.push(JSON.parse(raw)); }
+    catch (err) { /* ข้ามแถวที่ข้อมูลเสีย เช่นถูกแก้มือใน Sheet */ }
+  }
+  out.sort(function (a, b) { return (b.savedAt || '').localeCompare(a.savedAt || ''); });
+  return out;
+}
+
+/** เพิ่มแผนใหม่ 1 รายการเข้าประวัติ แล้วตัดอันเก่าสุดทิ้งถ้าเกิน PLAN_HISTORY_MAX */
+function planHistorySave(entry) {
+  if (!entry || typeof entry !== 'object' || !entry.id) {
+    return { error: 'entry ไม่ถูกต้อง' };
+  }
+  var json = JSON.stringify(entry);
+  if (json.length > 200000) {
+    return { error: 'ข้อมูลแผนนี้ใหญ่เกินไป' };
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = openSpreadsheet();
+    var sheet = getPlanHistorySheet(ss);
+    sheet.appendRow([entry.id, entry.savedAt || new Date().toISOString(), json]);
+
+    var count = sheet.getLastRow() - 1;
+    if (count > PLAN_HISTORY_MAX) {
+      var rows = sheet.getRange(2, 1, count, 2).getValues().map(function (r, i) {
+        return { row: i + 2, savedAt: r[1] };
+      });
+      rows.sort(function (a, b) { return (a.savedAt || '').localeCompare(b.savedAt || ''); }); // เก่าสุดก่อน
+      var toDelete = rows.slice(0, count - PLAN_HISTORY_MAX)
+        .sort(function (a, b) { return b.row - a.row; }); // ลบจากแถวมากไปน้อย กันเลขแถวเลื่อน
+      toDelete.forEach(function (r) { sheet.deleteRow(r.row); });
+    }
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ลบแผนตาม id ออกจากประวัติ */
+function planHistoryDelete(id) {
+  if (!id) return { error: 'ไม่พบ id' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = openSpreadsheet();
+    var sheet = getPlanHistorySheet(ss);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { ok: true };
+
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = ids.length - 1; i >= 0; i--) {
+      if (ids[i][0] === id) sheet.deleteRow(i + 2);
+    }
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
   }
 }
 
