@@ -565,13 +565,14 @@
   .plan-add-bar{margin-top:-10px;}
   .plan-add-btn{align-self:stretch;white-space:nowrap;}
   .kpi .value.plan-text{font-size:17px;line-height:1.4;}
-  .plan-step-table{min-width:1120px;}
+  .plan-step-table{min-width:1260px;}
   .plan-cell-input{
     width:84px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
     padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:12px;text-align:right;
   }
   .plan-cell-input:focus{outline:none;border-color:var(--accent);}
   .plan-cell-input.manual{border-color:var(--accent);}
+  .plan-owner-input{width:118px;text-align:left;font-family:inherit;font-size:11.5px;}
   .plan-move{
     background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;
     cursor:pointer;font-size:9px;line-height:1;padding:3px 4px;
@@ -825,6 +826,18 @@
           <option value="actual">อัตราจริงเฉลี่ยย้อนหลัง</option>
         </select>
       </div>
+      <div class="filter-group" style="min-width:250px;">
+        <span class="filter-label">การส่งงานระหว่างหน่วย</span>
+        <select id="planFlowMode" class="connect-select prod-dept-select">
+          <option value="overlap" selected>ส่งต่อระหว่างทำ — หน่วยถัดไปเริ่มทันทีที่ของถึงเกณฑ์</option>
+          <option value="serial">ทำจบทีละขั้น — รอหน่วยก่อนหน้าเสร็จทั้งล็อต</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">ของรอหน้าหน่วยถัดไป (ชม.)</span>
+        <input type="number" id="planWipHours" class="search-box plan-num" min="0" max="24" step="0.25" value="1">
+      </div>
+      <datalist id="planOwnerList"></datalist>
     </div>
 
     <div class="panel plan-items-panel">
@@ -1609,6 +1622,10 @@ const planState = {
   shiftStart: '08:00',
   scrapPct: 0,
   rateBasis: 'target_100',
+  // overlap = หน่วยถัดไปเริ่มทันทีที่หน่วยก่อนหน้าผลิตของถึงเกณฑ์ (ไม่รอทั้งล็อต), serial = ทำจบทีละขั้นแบบเดิม
+  flowMode: 'overlap',
+  // เกณฑ์ของที่ต้องมีรออยู่หน้าหน่วยถัดไปก่อนจะเริ่มได้ — คิดเป็น "กี่ชั่วโมงของกำลังผลิตหน่วยถัดไป"
+  wipHours: 1,
   jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: stepKey (dept+material) -> {rate, stations, qty, startAt}
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
@@ -1687,6 +1704,26 @@ function planAdvanceHours(from, hours, hpd, shiftMin){
   }
   return d;
 }
+/** ชั่วโมงทำงานจริงระหว่างสองเวลา (ตัดเวลานอกกะและวันอาทิตย์ออก) — ใช้วัดระยะเวลาของแผนที่ทำงานทับซ้อนกัน */
+function planWorkingHoursBetween(from, to, hpd, shiftMin){
+  if(!from || !to || to <= from) return 0;
+  let d = planClampToShift(from, hpd, shiftMin);
+  const dayEndMin = shiftMin + hpd*60;
+  let total = 0, guard = 0;
+  while(d < to && guard++ < 5000){
+    const dayEnd = new Date(d.getTime());
+    dayEnd.setHours(0,0,0,0);
+    dayEnd.setMinutes(dayEndMin);
+    const stop = Math.min(dayEnd.getTime(), to.getTime());
+    if(stop > d.getTime()) total += (stop - d.getTime())/3600000;
+    d = new Date(dayEnd.getTime());
+    d.setDate(d.getDate()+1);
+    while(d.getDay() === 0) d.setDate(d.getDate()+1);
+    d.setHours(0,0,0,0); d.setMinutes(shiftMin);
+  }
+  return total;
+}
+
 /** แสดงวันที่ + เวลา แบบ D/M/YYYY HH:MM */
 function planFmtDateTime(dt){
   if(!dt) return '—';
@@ -1711,6 +1748,12 @@ function planNormalizeMaterialKey(material){
     .trim()
     .replace(/\s+/g, ' ')
     .replace(/\s*([()+\-])\s*/g, '$1');
+}
+
+/** ชิ้นส่วนย่อยของงานเดียวกัน — ขั้นตอนที่รวมชิ้นส่วน เช่น ทากาว (ตัว+ขอบ) รับของมาจากทั้ง (ตัว) และ (ขอบ)
+ *  ตัดเฉพาะวงเล็บท้ายที่เป็นชื่อชิ้นส่วนพวกนี้เท่านั้น วงเล็บอื่น (เช่น ไซส์ "( 6.2CM )") ยังแยกกันตามเดิม */
+function planMaterialFamily(material){
+  return planNormalizeMaterialKey(material).replace(/\((?:ตัว|ขอบ)(?:\+(?:ตัว|ขอบ))*\)$/, '');
 }
 
 function planItemOptions(){
@@ -2037,9 +2080,21 @@ function planStepStations(step, job){
   const ov = job.overrides[step.key];
   return (ov && ov.stations > 0) ? ov.stations : 1;
 }
+/** ชื่อผู้รับผิดชอบขั้นตอนนี้ (พิมพ์เองในตาราง) — ว่าง = ยังไม่ระบุตัวคน คิดคิวรวมที่หน่วยงานแทน */
+function planStepOwner(step, job){
+  const ov = job.overrides[step.key];
+  return (ov && typeof ov.owner === 'string') ? ov.owner.trim() : '';
+}
+/** รายชื่อพนักงานให้เลือกเป็นผู้รับผิดชอบ — จากชื่อที่เคยบันทึกงานไว้จริงในชีต (พิมพ์ชื่อใหม่เองก็ได้) */
+function planOwnerOptions(){
+  return allEmployees.filter(Boolean);
+}
 
 /**
- * คำนวณทั้งแผน — Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)
+ * คำนวณทั้งแผน — สองโหมด
+ *   serial  : Item ขึ้นงานไล่ตามลำดับในแผน ขั้นตอนถัดไปเริ่มเมื่อขั้นก่อนหน้าเสร็จทั้งล็อต (แบบเดิม)
+ *   overlap : หน่วยถัดไปเริ่มทันทีที่หน่วยก่อนหน้าผลิตของถึงเกณฑ์ (ของรอ = wipHours ชั่วโมงของกำลังผลิต
+ *             หน่วยถัดไป) และคนหนึ่งคน/หน่วยงานหนึ่งหน่วยทำได้ทีละงาน งานถัดไปของคนนั้นจึงต่อคิวกันไป
  * ภายใน Item เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
  * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องส่งมอบ ถ้าผู้ใช้พิมพ์จำนวน "ต้องทำ" เองที่
  * ขั้นตอนไหน ให้ยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไป
@@ -2054,6 +2109,13 @@ function computePlan(){
   const seedDt = new Date(seedP[0], seedP[1]-1, seedP[2], Math.floor(shiftMin/60), shiftMin%60);
   let cursor = planClampToShift(seedDt, hpd, shiftMin);   // เวลาจริง รวมเวลาเริ่มที่แก้เอง — ใช้แสดงวันที่/เวลาจริง
   const startDt = new Date(cursor.getTime());
+
+  const overlap = planState.flowMode !== 'serial';
+  const wipHours = planState.wipHours >= 0 ? planState.wipHours : 1;
+  // คิวของผู้รับผิดชอบ — คนเดียว (หรือหน่วยงานเดียว ถ้ายังไม่ระบุชื่อคน) ทำสองงานพร้อมกันไม่ได้
+  // งานถัดไปของคนนั้นจึงเริ่มได้เร็วสุดตอนที่งานก่อนหน้าของเขาเสร็จ ข้ามทั้ง Item ในแผนเดียวกัน
+  const resourceFree = new Map();
+  const resourceKeyOf = (r)=> r.owner ? ('คน|' + r.owner) : ('หน่วย|' + r.step.dept);
 
   const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
@@ -2104,28 +2166,126 @@ function computePlan(){
     }
 
     const jobStartDt = new Date(cursor.getTime());
-    main.forEach(r=>{
-      fillRow(r);
 
-      // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
-      const ov = job.overrides[r.step.key];
-      if(ov && ov.startAt){
-        const manualDt = new Date(ov.startAt);
-        if(!isNaN(manualDt.getTime())) cursor = planClampToShift(manualDt, hpd, shiftMin);
-      }
-      r.start_override = !!(ov && ov.startAt);
-      r.start_dt = new Date(cursor.getTime());
-      if(r.days != null) cursor = planAdvanceHours(cursor, r.hours, hpd, shiftMin);
-      r.end_dt = r.days != null ? new Date(cursor.getTime()) : null;
-      // ใช้จุดเดียวกับตาราง เพื่อให้ไทม์ไลน์ขยับตามเวลาเริ่มที่แก้เองเสมอ
-      r.tl_start = r.start_dt;
-      r.tl_end = r.end_dt;
+    if(overlap){
+      // หน่วยก่อนหน้าของแต่ละแถว = ขั้นตอนก่อนหน้าที่สุดของ "งานตัวเดียวกัน" ในตาราง
+      // ขั้นตอนที่รวมชิ้นส่วน (เช่น ทากาว (ตัว+ขอบ)) รับของจากทุกแถวของหน่วยนั้น — ต้องรอครบทุกชิ้นส่วนถึงเริ่มได้
+      const prevRowsOf = new Map();
+      main.forEach((r, idx)=>{
+        const fam = planMaterialFamily(r.step.material);
+        let prevDept = null;
+        for(let j = idx-1; j >= 0; j--){
+          if(planMaterialFamily(main[j].step.material) === fam && main[j].step.dept !== r.step.dept){
+            prevDept = main[j].step.dept;
+            break;
+          }
+        }
+        if(prevDept == null) return;
+        const rows = [];
+        for(let j = 0; j < idx; j++){
+          if(main[j].step.dept === prevDept && planMaterialFamily(main[j].step.material) === fam) rows.push(main[j]);
+        }
+        if(rows.length) prevRowsOf.set(idx, rows);
+      });
+
+      main.forEach((r, idx)=>{
+        fillRow(r);
+        r.owner = planStepOwner(r.step, job);
+        const ov = job.overrides[r.step.key];
+        const prevRows = prevRowsOf.get(idx) || [];
+
+        // เวลาที่ "ของถึงเกณฑ์" — หน่วยก่อนหน้าผลิตได้พอให้หน่วยนี้เดินต่อเนื่องแล้ว เริ่มได้เลยไม่ต้องรอทั้งล็อต
+        // มีหลายชิ้นส่วนป้อนเข้ามาก็ต้องรอชิ้นส่วนที่มาถึงช้าที่สุด
+        let ready = new Date(startDt.getTime());
+        let prevEndDt = null;
+        r.wait_qty = null;
+        r.prev_dept = prevRows.length ? prevRows[0].step.dept : '';
+        const thisRate = (r.rate > 0) ? r.rate * r.stations : 0;
+        prevRows.forEach(prev=>{
+          if(!prev.start_dt) return;
+          const prevRate = (prev.rate > 0) ? prev.rate * prev.stations : 0;
+          let fedAt;
+          if(prevRate > 0 && thisRate > 0 && prev.end_dt){
+            const needQty = Math.min(prev.qty_in, wipHours * thisRate);
+            const fed = planAdvanceHours(prev.start_dt, needQty/prevRate, hpd, shiftMin);
+            fedAt = fed > prev.end_dt ? new Date(prev.end_dt.getTime()) : fed;
+            if(r.wait_qty == null || needQty > r.wait_qty) r.wait_qty = needQty;
+          }else{
+            // ไม่มีอัตราการผลิตให้คิดจุดส่งของ — กลับไปรอให้ขั้นก่อนหน้าเสร็จก่อนตามเดิม
+            fedAt = new Date((prev.end_dt || prev.start_dt).getTime());
+          }
+          if(fedAt > ready) ready = fedAt;
+          if(prev.end_dt && (!prevEndDt || prev.end_dt > prevEndDt)) prevEndDt = prev.end_dt;
+        });
+
+        const rkey = resourceKeyOf(r);
+        const free = resourceFree.get(rkey);
+        r.wait_resource = !!(free && free > ready);
+        let begin = r.wait_resource ? new Date(free.getTime()) : ready;
+
+        // เวลาเริ่มที่ผู้ใช้พิมพ์เองมาก่อนเสมอ (ให้ตรงกับความเป็นจริงหน้างาน)
+        if(ov && ov.startAt){
+          const manualDt = new Date(ov.startAt);
+          if(!isNaN(manualDt.getTime())){
+            begin = manualDt;
+            r.wait_resource = false;
+            r.wait_qty = null;
+          }
+        }
+        r.start_override = !!(ov && ov.startAt);
+        r.start_dt = planClampToShift(begin, hpd, shiftMin);
+
+        if(r.hours != null){
+          let end = planAdvanceHours(r.start_dt, r.hours, hpd, shiftMin);
+          // หน่วยนี้เร็วกว่าหน่วยก่อนหน้า = ทำไปรอของไป เสร็จได้เร็วสุดคือหลังรับของก้อนสุดท้ายมาทำจนจบ
+          if(prevEndDt && r.wait_qty != null && !r.start_override){
+            const tailEnd = planAdvanceHours(prevEndDt, r.wait_qty/(r.rate*r.stations), hpd, shiftMin);
+            if(tailEnd > end){
+              end = tailEnd;
+              r.starved = true;   // ต้องรอของระหว่างทำ ไม่ได้เดินเครื่องต่อเนื่อง
+            }
+          }
+          r.end_dt = end;
+        }else{
+          r.end_dt = null;
+        }
+        resourceFree.set(rkey, r.end_dt || r.start_dt);
+        r.tl_start = r.start_dt;
+        r.tl_end = r.end_dt;
+      });
+    }else{
+      main.forEach(r=>{
+        fillRow(r);
+        r.owner = planStepOwner(r.step, job);
+
+        // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
+        const ov = job.overrides[r.step.key];
+        if(ov && ov.startAt){
+          const manualDt = new Date(ov.startAt);
+          if(!isNaN(manualDt.getTime())) cursor = planClampToShift(manualDt, hpd, shiftMin);
+        }
+        r.start_override = !!(ov && ov.startAt);
+        r.start_dt = new Date(cursor.getTime());
+        if(r.days != null) cursor = planAdvanceHours(cursor, r.hours, hpd, shiftMin);
+        r.end_dt = r.days != null ? new Date(cursor.getTime()) : null;
+        // ใช้จุดเดียวกับตาราง เพื่อให้ไทม์ไลน์ขยับตามเวลาเริ่มที่แก้เองเสมอ
+        r.tl_start = r.start_dt;
+        r.tl_end = r.end_dt;
+      });
+    }
+
+    // จุดเริ่ม/จุดจบจริงของ Item นี้ — คิดจากขั้นตอนที่เริ่มเร็วสุดและเสร็จช้าสุด เพราะในโหมดส่งต่อระหว่างทำ
+    // ขั้นตอนต่างๆ ทับซ้อนกัน ขั้นตอนสุดท้ายในตารางจึงไม่จำเป็นต้องเป็นขั้นที่เสร็จทีหลังสุดเสมอไป
+    let jobRealStartDt = null, jobEndDt = null;
+    main.forEach(r=>{
+      if(r.start_dt && (!jobRealStartDt || r.start_dt < jobRealStartDt)) jobRealStartDt = r.start_dt;
+      if(r.end_dt && (!jobEndDt || r.end_dt > jobEndDt)) jobEndDt = r.end_dt;
     });
-    // จุดเริ่มจริงของ Item นี้ — ถ้าขั้นตอนแรกของสายหลักถูกแก้เวลาเอง ให้ยึดเวลานั้น ไม่ใช่เวลาก่อนแก้
-    const jobRealStartDt = main.length ? main[0].start_dt : jobStartDt;
+    if(!jobRealStartDt) jobRealStartDt = jobStartDt;
     // ขั้นตอนแยกทำเมื่อไรก็ได้ ไม่ผูกวันที่จริงให้ (ตารางแสดง "—") แต่ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
     extra.forEach(r=>{
       fillRow(r);
+      r.owner = planStepOwner(r.step, job);
       r.start_dt = null;
       r.end_dt = null;
       r.tl_start = jobRealStartDt;
@@ -2142,7 +2302,7 @@ function computePlan(){
       mainDays: mainHours/hpd,
       totalDays: (mainHours + extraHours)/hpd,
       start_dt: main.length ? jobRealStartDt : null,
-      end_dt: main.length ? new Date(cursor.getTime()) : null
+      end_dt: main.length ? jobEndDt : null
     };
   });
 
@@ -2155,8 +2315,15 @@ function computePlan(){
     });
   });
 
+  // โหมดส่งต่อระหว่างทำ: ทั้งแผนเสร็จเมื่อ Item ที่เสร็จช้าสุดเสร็จ (งานหลาย Item เดินทับซ้อนกันได้)
+  const finishDt = overlap
+    ? (jobs.reduce((mx, j)=> (j.end_dt && (!mx || j.end_dt > mx)) ? j.end_dt : mx, null) || new Date(startDt.getTime()))
+    : new Date(cursor.getTime());
+  const spanHours = planWorkingHoursBetween(startDt, finishDt, hpd, shiftMin);
+
   return {
-    jobs, startIso, hpd,
+    jobs, startIso, hpd, overlap, wipHours,
+    spanHours, spanDays: spanHours/hpd,
     hasExtra: jobs.some(j=> j.extra.length > 0),
     qty: agg('qty'),
     startQty: agg('startQty'),
@@ -2166,7 +2333,7 @@ function computePlan(){
     mainDays: agg('mainHours')/hpd,
     totalDays: agg('totalHours')/hpd,
     startDt,
-    finishDt: new Date(cursor.getTime()),
+    finishDt,
     missingRate: jobs.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
     bottleneck
   };
@@ -2336,6 +2503,8 @@ function planExportExcel(){
     ['ชั่วโมงทำงาน/วัน', plan.hpd],
     ['เผื่อของเสีย (%)', planState.scrapPct],
     ['ฐานอัตราการผลิต', rateBasisLabel],
+    ['การส่งงานระหว่างหน่วย', plan.overlap ? 'ส่งต่อระหว่างทำ (หน่วยถัดไปเริ่มเมื่อของถึงเกณฑ์)' : 'ทำจบทีละขั้น'],
+    ['ของรอหน้าหน่วยถัดไป (ชม.)', plan.overlap ? plan.wipHours : ''],
     [],
     ['Item ในแผน (รายการ)', plan.jobs.length],
     ['รวมที่ต้องส่งมอบ (ชิ้น)', plan.qty],
@@ -2344,20 +2513,30 @@ function planExportExcel(){
     ['  - สายหลัก (ชม.)', planRound2(plan.mainHours)],
     ['  - ขั้นตอนแยก (ชม.)', planRound2(plan.extraHours)],
     ['จำนวนวันทำงาน (สายหลัก)', planRound2(plan.mainDays)],
+    ['ระยะเวลาตามแผน (วัน)', planRound2(plan.spanDays)],
     ['คาดว่าเสร็จทั้งแผน', planFmtDateTime(plan.finishDt)],
     ['ขั้นตอนคอขวด', plan.bottleneck ? (plan.bottleneck.row.step.dept + ' (' + plan.bottleneck.job.item + ')') : '—'],
     ['ขั้นตอนที่ไม่มีอัตราการผลิต (รายการ)', plan.missingRate]
   ];
 
-  const detailHeader = ['ลำดับ Item','รหัส Item','จำนวน Item (ชิ้น)','ประเภทขั้นตอน','ลำดับขั้นตอน','ขั้นตอน (หน่วยงาน)','ชื่อวัตถุดิบ','อัตรา (ชิ้น/ชม.)','ที่มาอัตรา','จำนวนสถานีที่ทำขนาน','ต้องทำ (ชิ้น)','ชั่วโมง','วัน','เริ่ม','สิ้นสุด','อ้างอิง (รายการ)'];
+  const detailHeader = ['ลำดับ Item','รหัส Item','จำนวน Item (ชิ้น)','ประเภทขั้นตอน','ลำดับขั้นตอน','ขั้นตอน (หน่วยงาน)','ชื่อวัตถุดิบ','ผู้รับผิดชอบ','อัตรา (ชิ้น/ชม.)','ที่มาอัตรา','จำนวนสถานีที่ทำขนาน','ต้องทำ (ชิ้น)','ชั่วโมง','วัน','เริ่ม','สิ้นสุด','เริ่มได้เมื่อ','อ้างอิง (รายการ)'];
   const detailRows = [detailHeader];
   plan.jobs.forEach((jp,i)=>{
     const pushRow = (r, no, kind)=>{
+      let startWhy = '';
+      if(plan.overlap && r.start_dt && !r.start_override){
+        if(r.wait_resource) startWhy = 'รอคิว ' + (r.owner || r.step.dept);
+        else if(r.wait_qty >= 1 && r.prev_dept) startWhy = 'เริ่มเมื่อ ' + r.prev_dept + ' ทำได้ ' + Math.round(r.wait_qty) + ' ชิ้น';
+        else if(r.prev_dept) startWhy = 'เริ่มพร้อม ' + r.prev_dept;
+        if(r.starved) startWhy += (startWhy ? ' · ' : '') + 'รอของระหว่างทำ';
+      }else if(r.start_override){
+        startWhy = 'กำหนดเวลาเริ่มเอง';
+      }
       detailRows.push([
         i+1, jp.job.item, jp.qty, kind, no || '', r.step.dept,
-        r.step.material || '', r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'ไม่มีข้อมูล',
+        r.step.material || '', r.owner || '', r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'ไม่มีข้อมูล',
         r.stations, Math.round(r.qty_in), r.hours != null ? planRound2(r.hours) : '', r.days != null ? planRound2(r.days) : '',
-        r.start_dt ? planFmtDateTime(r.start_dt) : '', r.end_dt ? planFmtDateTime(r.end_dt) : '', r.step.n
+        r.start_dt ? planFmtDateTime(r.start_dt) : '', r.end_dt ? planFmtDateTime(r.end_dt) : '', startWhy, r.step.n
       ]);
     };
     jp.main.forEach((r,k)=> pushRow(r, k+1, 'สายหลัก'));
@@ -2414,6 +2593,8 @@ function planSnapshotCurrent(){
     startIso: planState.startIso,
     scrapPct: planState.scrapPct,
     rateBasis: planState.rateBasis,
+    flowMode: planState.flowMode,
+    wipHours: planState.wipHours,
     jobs: planValidJobs().map(j=> ({
       item: j.item, qty: j.qty, order: j.order || [], manualSteps: j.manualSteps || [],
       overrides: j.overrides || {}
@@ -2449,6 +2630,9 @@ function planApplySnapshotToState(entry){
   planState.startIso = entry.startIso || planTodayIso();
   planState.scrapPct = entry.scrapPct || 0;
   planState.rateBasis = entry.rateBasis || 'target_100';
+  // แผนที่บันทึกไว้ก่อนมีโหมดส่งต่อระหว่างทำ ให้เปิดกลับมาแบบเดิม (ทำจบทีละขั้น) ผลลัพธ์จะได้ไม่เพี้ยนจากที่เคยเห็น
+  planState.flowMode = entry.flowMode || 'serial';
+  planState.wipHours = (typeof entry.wipHours === 'number' && entry.wipHours >= 0) ? entry.wipHours : 1;
   planState.jobs = (entry.jobs || []).map(j=> ({
     uid: ++planJobUid,
     item: j.item || '',
@@ -2469,6 +2653,8 @@ function planApplySnapshotToState(entry){
   document.getElementById('planStartDate').value = planState.startIso;
   document.getElementById('planScrap').value = planState.scrapPct;
   document.getElementById('planRateBasis').value = planState.rateBasis;
+  document.getElementById('planFlowMode').value = planState.flowMode;
+  document.getElementById('planWipHours').value = planState.wipHours;
 }
 
 /** ปุ่ม "โหลด" ในประวัติ — แทนที่แผนปัจจุบันด้วยรายการที่บันทึกไว้ แล้วคำนวณใหม่ทันที */
@@ -2604,9 +2790,12 @@ function renderPlanner(){
      sub:'ให้ได้ของดี %s ชิ้น (เผื่อของเสีย %p%)'.replace('%s', fmtNum(plan.qty)).replace('%p', fmtNum(planState.scrapPct,1)), cls:''},
     {label:'เวลาที่ต้องใช้รวม', value:fmtHM(plan.totalHours), unit:'ชม.',
      sub: split ? 'สายหลัก %m ชม. + ขั้นตอนแยก %e ชม.'.replace('%m', fmtHM(plan.mainHours)).replace('%e', fmtHM(plan.extraHours))
-                : 'รวมทุกขั้นตอนทุก Item แบบทำต่อกัน', cls:''},
-    {label:'จำนวนวันทำงาน', value:fmtNum(plan.mainDays,1), unit:'วัน',
-     sub:'ที่ %h ชม./วัน'.replace('%h', fmtNum(plan.hpd,1)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
+                : (plan.overlap ? 'ชั่วโมงงานรวมทุกขั้นตอนทุก Item (ยังไม่หักส่วนที่ทำทับซ้อนกัน)' : 'รวมทุกขั้นตอนทุก Item แบบทำต่อกัน'), cls:''},
+    plan.overlap
+      ? {label:'ระยะเวลาตามแผน', value:fmtNum(plan.spanDays,1), unit:'วัน',
+         sub:'ช่วงเวลาจริงตั้งแต่เริ่มถึงเสร็จ (หน่วยงานทำทับซ้อนกัน) ที่ %h ชม./วัน'.replace('%h', fmtNum(plan.hpd,1)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''}
+      : {label:'จำนวนวันทำงาน', value:fmtNum(plan.mainDays,1), unit:'วัน',
+         sub:'ที่ %h ชม./วัน'.replace('%h', fmtNum(plan.hpd,1)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
     {label:'คาดว่าเสร็จทั้งแผน', value:planFmtDateTime(plan.finishDt), unit:'', textValue:true,
      sub:'เริ่ม %d · ข้ามวันอาทิตย์'.replace('%d', planFmtDateTime(plan.startDt)) + (split ? ' · ไม่รวมขั้นตอนแยก' : ''), cls:''},
     {label:'ขั้นตอนคอขวด',
@@ -2629,6 +2818,14 @@ function renderPlanner(){
     const stepKey = escapeHtml(r.step.key).replace(/"/g,'&quot;');
     const material = cleanMaterialDisplay(r.step.material || '');
     const srcLabel = r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src] || '') : 'ไม่มีข้อมูล';
+    // บอกว่าเวลาเริ่มของแถวนี้ถูกอะไรกำหนด — รอของจากหน่วยก่อนหน้า หรือรอคิวคน/หน่วยงานที่รับผิดชอบ
+    let flowNote = '';
+    if(plan.overlap && r.start_dt && !r.start_override){
+      if(r.wait_resource) flowNote = 'รอคิว ' + (r.owner || r.step.dept);
+      else if(r.wait_qty >= 1 && r.prev_dept) flowNote = 'เริ่มเมื่อ ' + r.prev_dept + ' ทำได้ ' + fmtNum(Math.round(r.wait_qty)) + ' ชิ้น';
+      else if(r.prev_dept) flowNote = 'เริ่มพร้อม ' + r.prev_dept;
+      if(r.starved) flowNote += (flowNote ? ' · ' : '') + 'รอของระหว่างทำ';
+    }
     const seq = no
       ? `<span class="plan-seq-no">${no}</span>
           <button class="plan-move" data-move="up" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนขึ้น" ${no===1?'disabled':''}>▲</button>
@@ -2638,6 +2835,11 @@ function renderPlanner(){
       <td><div class="plan-seq">${seq}</div></td>
       <td><span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml((r.step.dept))}</span>${STEP_OPTIONAL[r.step.dept] ? '<div class="plan-src">เฉพาะบอลบางไซส์</div>' : ''}${r.step.rank_src === 'manual' ? `<button class="plan-move plan-del plan-del-step" data-delstep="${dept}" data-job="${job.uid}" title="ลบขั้นตอนที่เพิ่มเอง">✕</button>` : ''}</td>
       <td><div class="plan-material" title="${escapeHtml(material).replace(/"/g,'&quot;')}">${material ? escapeHtml(planShortMaterial(material)) : '—'}</div></td>
+      <td>
+        <input class="plan-cell-input plan-owner-input${r.owner ? ' manual' : ''}" type="text" list="planOwnerList"
+               data-field="owner" data-job="${job.uid}" data-key="${stepKey}"
+               value="${escapeHtml(r.owner || '').replace(/"/g,'&quot;')}" placeholder="ยังไม่ระบุ" title="ใครรับผิดชอบขั้นตอนนี้ — คนเดียวกันจะไม่ถูกจัดให้ทำสองงานพร้อมกัน">
+      </td>
       <td class="num">
         <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-key="${stepKey}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
         <div class="plan-src ${r.rate_src === 'manual' ? 'manual' : ''}">${srcLabel}</div>
@@ -2653,6 +2855,7 @@ function renderPlanner(){
       <td class="num mono">${r.days != null ? fmtNum(r.days,2) : '—'}</td>
       <td class="mono plan-daterange">
         <div>${r.start_dt ? planFmtDateTime(r.start_dt) + ' → ' + planFmtDateTime(r.end_dt) : '—'}</div>
+        ${flowNote ? `<div class="plan-src">${escapeHtml(flowNote)}</div>` : ''}
         ${r.start_dt ? `<div class="plan-start-edit">
           <input class="plan-cell-input plan-start-input" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-key="${stepKey}" value="${planFmtDateTimeLocal(r.start_dt)}" title="แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง">
           ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${stepKey}" data-job="${job.uid}" title="ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ">✕</button>` : ''}
@@ -2666,18 +2869,18 @@ function renderPlanner(){
     const job = jp.job;
     const mainBody = jp.main.map((r,k)=> rowHtml(r, job, k+1, jp.main.length)).join('');
     const extraBody = jp.extra.length
-      ? `<tr class="plan-sep"><td colspan="10">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก จึงไม่ผูกวันที่และไม่นับรวมในวันที่เสร็จ</td></tr>` + jp.extra.map(r=> rowHtml(r, job, 0, 0)).join('')
+      ? `<tr class="plan-sep"><td colspan="11">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก จึงไม่ผูกวันที่และไม่นับรวมในวันที่เสร็จ</td></tr>` + jp.extra.map(r=> rowHtml(r, job, 0, 0)).join('')
       : '';
     const totalRows = (jp.extra.length ? `
             <tr class="plan-tot">
-              <td colspan="6">รวมเฉพาะสายหลัก</td>
+              <td colspan="7">รวมเฉพาะสายหลัก</td>
               <td class="num mono">${fmtHM(jp.mainHours)}</td>
               <td class="num mono">${fmtNum(jp.mainDays,2)}</td>
               <td class="mono">${jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : '—'}</td>
               <td></td>
             </tr>` : '') + `
             <tr class="plan-tot">
-              <td colspan="6">รวม Item นี้</td>
+              <td colspan="7">รวม Item นี้</td>
               <td class="num mono">${fmtHM(jp.totalHours)}</td>
               <td class="num mono">${fmtNum(jp.totalDays,2)}</td>
               <td class="mono">${jp.extra.length ? '—' : (jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : '—')}</td>
@@ -2710,6 +2913,7 @@ function renderPlanner(){
               <th>ลำดับ</th>
               <th>ขั้นตอน (หน่วยงาน)</th>
               <th>ชื่อวัตถุดิบ</th>
+              <th>ผู้รับผิดชอบ</th>
               <th class="num">อัตรา (ชิ้น/ชม.)</th>
               <th class="num">สถานีที่ทำขนาน</th>
               <th class="num">ต้องทำ (ชิ้น)</th>
@@ -2740,12 +2944,12 @@ function renderPlanner(){
   const tlSpanMs = (tlMinMs != null && tlMaxMs != null) ? Math.max(tlMaxMs - tlMinMs, 3600000) : 1;
   const tlRow = (r, standalone)=>{
     const c = getDeptColor(r.step.dept);
-    const name = escapeHtml((r.step.dept));
+    const name = escapeHtml(r.step.dept) + (r.owner ? ` <span class="plan-src">· ${escapeHtml(r.owner)}</span>` : '');
     if(!r.tl_start || !r.tl_end) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
     const left = ((r.tl_start.getTime() - tlMinMs)/tlSpanMs)*100;
     const width = Math.max(((r.tl_end.getTime() - r.tl_start.getTime())/tlSpanMs)*100, 1.2);
     const material = cleanMaterialDisplay(r.step.material || '') || 'ไม่มีข้อมูลวัตถุดิบ';
-    const tip = `${r.step.dept} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน\n${planFmtDateTime(r.tl_start)} → ${planFmtDateTime(r.tl_end)}`;
+    const tip = `${r.step.dept}${r.owner ? ' (' + r.owner + ')' : ''} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน\n${planFmtDateTime(r.tl_start)} → ${planFmtDateTime(r.tl_end)}`;
     return `<div class="plan-tl-row">
       <div class="plan-tl-name">${name}</div>
       <div class="plan-tl-track">
@@ -2772,7 +2976,15 @@ function renderPlanner(){
       <h2>สมมติฐานที่ใช้คำนวณ</h2>
       <div class="panel-note">ตัวเลขทั้งหมดเป็นประมาณการจากข้อมูลย้อนหลัง ไม่ใช่แผนผลิตที่ยืนยันแล้ว</div>
       <ul>
-        <li><b>ลำดับ Item</b> — Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ) สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง</li>
+        <li><b>การส่งงานระหว่างหน่วย</b> — ${plan.overlap
+            ? `เลือกไว้แบบ <b>ส่งต่อระหว่างทำ</b>: หน่วยถัดไปไม่ต้องรอหน่วยก่อนหน้าทำครบทั้งล็อต แต่เริ่มทันทีที่หน่วยก่อนหน้าผลิตของได้ถึงเกณฑ์ที่ตั้งไว้ (${fmtNum(plan.wipHours,2)} ชม. ของกำลังผลิตหน่วยถัดไป — แก้ได้ที่ช่อง “ของรอหน้าหน่วยถัดไป” ด้านบน) ถ้าหน่วยถัดไปเร็วกว่าหน่วยก่อนหน้า จะทำไปรอของไป จึงเสร็จได้เร็วสุดหลังรับของก้อนสุดท้ายมาทำจนจบ`
+            : `เลือกไว้แบบ <b>ทำจบทีละขั้น</b>: หน่วยถัดไปเริ่มเมื่อหน่วยก่อนหน้าทำครบทั้งล็อตแล้ว และ Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ`}</li>
+        <li><b>ผู้รับผิดชอบ</b> — พิมพ์ชื่อคน (หรือทีม) ที่รับผิดชอบได้ทีละขั้นตอนในตาราง ${plan.overlap
+            ? 'คนเดียวกันจะไม่ถูกจัดให้ทำสองงานพร้อมกัน งานถัดไปของเขาจึงต่อคิวจากงานเดิม (ข้าม Item ในแผนเดียวกันด้วย) ขั้นตอนที่ยังไม่ระบุชื่อจะคิดคิวรวมที่หน่วยงานนั้นแทน คือหน่วยงานหนึ่งทำได้ทีละงาน — แยกชื่อคนคนละคนให้ขั้นตอนที่ทำขนานกันได้จริง แล้วงานจะเดินพร้อมกัน'
+            : 'ชื่อที่กรอกไว้จะถูกบันทึกและส่งออกไปกับแผน แต่โหมด “ทำจบทีละขั้น” ไม่ได้คิดคิวของแต่ละคน — เปลี่ยนเป็นโหมดส่งต่อระหว่างทำถ้าต้องการให้คิวคนมีผลกับเวลา'}</li>
+        <li><b>ลำดับ Item</b> — ${plan.overlap
+            ? 'Item ที่อยู่บนสุดได้คิวก่อนเมื่อแย่งคน/หน่วยงานเดียวกัน แต่ Item ที่ไม่ได้ใช้คนซ้ำกันเดินขนานกันได้'
+            : 'Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)'} สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง</li>
         <li><b>ลำดับขั้นตอน</b> — ในชีตไม่มีคอลัมน์ลำดับขั้นตอน (step order) ระบบจึงใช้ลำดับมาตรฐานของสายหลัก: รีด → ปั๊ม → เปเปอร์ → ตัดยาง → ทากาว → เจียร์ → เจียร์(หยาบ) → เจียร์(ละเอียด) → เจาะ โดยเจียร์(หยาบ)/(ละเอียด) ทำเฉพาะบอลบางไซส์ — ปรับลำดับด้วยปุ่ม ▲▼ ได้</li>
         <li><b>Item ที่เป็นเซ็ต (หลายชิ้นส่วน)</b> — ถ้า Item เดียวกันมีมากกว่า 1 ชิ้นส่วน/วัตถุดิบผ่านหน่วยงานเดียวกัน (เช่น เจียร์บอล กับ เจียร์พิน ของเซ็ตลูกโบว์ลิ่ง) ระบบจะแยกเป็นคนละแถวให้อัตโนมัติตามชื่อวัตถุดิบ แล้วทำให้ครบทุกขั้นตอนของชิ้นส่วนหนึ่งก่อน จึงขึ้นชิ้นส่วนถัดไป (ไม่ทำสลับข้ามชิ้นส่วนกัน)</li>
         ${extraNote}
@@ -2796,6 +3008,8 @@ function refreshPlanner(){
   if(planState.computed && !planValidJobs().length) planState.computed = false;
   const custList = document.getElementById('planCustomerList');
   if(custList) custList.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
+  const ownerList = document.getElementById('planOwnerList');
+  if(ownerList) ownerList.innerHTML = planOwnerOptions().map(n=>`<option value="${escapeHtml(n).replace(/"/g,'&quot;')}"></option>`).join('');
   renderPlanRows();
   renderPlanner();
 }
@@ -2814,6 +3028,7 @@ function refreshPlanner(){
   };
   num('planHoursPerDay', 'hoursPerDay', 0.5, 24);
   num('planScrap', 'scrapPct', 0, 90);
+  num('planWipHours', 'wipHours', 0, 24);
 
   document.getElementById('planCustomer').addEventListener('input', (e)=>{ planState.customer = e.target.value; });
   document.getElementById('planPO').addEventListener('input', (e)=>{ planState.po = e.target.value; });
@@ -2829,6 +3044,10 @@ function refreshPlanner(){
   });
   document.getElementById('planRateBasis').addEventListener('change', (e)=>{
     planState.rateBasis = e.target.value;
+    renderPlanner();
+  });
+  document.getElementById('planFlowMode').addEventListener('change', (e)=>{
+    planState.flowMode = e.target.value === 'serial' ? 'serial' : 'overlap';
     renderPlanner();
   });
 
@@ -3034,6 +3253,12 @@ function refreshPlanner(){
     // เวลาเริ่มขั้นตอน (แก้เองให้สอดคล้องกับความเป็นจริง) เป็นข้อความวันที่-เวลา ไม่ใช่ตัวเลข
     if(field === 'startAt'){
       job.overrides[key].startAt = inp.value || null;
+      renderPlanner();
+      return;
+    }
+    // ชื่อผู้รับผิดชอบเป็นข้อความเช่นกัน — ใช้จัดคิวว่าใครติดงานอะไรอยู่
+    if(field === 'owner'){
+      job.overrides[key].owner = inp.value.trim();
       renderPlanner();
       return;
     }
