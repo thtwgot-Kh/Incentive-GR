@@ -573,6 +573,15 @@
   .plan-cell-input:focus{outline:none;border-color:var(--accent);}
   .plan-cell-input.manual{border-color:var(--accent);}
   .plan-owner-input{width:118px;text-align:left;font-family:inherit;font-size:11.5px;}
+  .plan-cap-input{
+    width:96px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
+    padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:12px;text-align:right;
+  }
+  .plan-cap-input:focus{outline:none;border-color:var(--accent);}
+  .plan-cap-input:disabled{opacity:.5;}
+  .plan-cap-names{width:210px;text-align:left;font-family:inherit;font-size:11.5px;}
+  .plan-balance-table{min-width:900px;}
+  .plan-bottleneck{color:var(--bad);}
   .plan-move{
     background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;
     cursor:pointer;font-size:9px;line-height:1;padding:3px 4px;
@@ -1626,6 +1635,8 @@ const planState = {
   flowMode: 'overlap',
   // เกณฑ์ของที่ต้องมีรออยู่หน้าหน่วยถัดไปก่อนจะเริ่มได้ — คิดเป็น "กี่ชั่วโมงของกำลังผลิตหน่วยถัดไป"
   wipHours: 1,
+  // กำลังคนของแต่ละหน่วยงาน: dept -> {workers, names} — workers = ทำพร้อมกันได้กี่งาน (ค่าเริ่มต้น 1)
+  capacity: {},
   jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: stepKey (dept+material) -> {rate, stations, qty, startAt}
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false      // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
@@ -2085,6 +2096,26 @@ function planStepOwner(step, job){
   const ov = job.overrides[step.key];
   return (ov && typeof ov.owner === 'string') ? ov.owner.trim() : '';
 }
+/** กำลังคนของหน่วยงานหนึ่ง — มีรายชื่อก็ใช้จำนวนรายชื่อเป็นจำนวนช่องงาน ไม่มีก็ใช้ตัวเลขที่กรอก (ต่ำสุด 1) */
+function planDeptPool(dept){
+  const cap = (planState.capacity && planState.capacity[dept]) || {};
+  const names = String(cap.names || '').split(',').map(x=> x.trim()).filter(Boolean);
+  const size = names.length ? names.length : Math.max(1, Math.round(cap.workers > 0 ? cap.workers : 1));
+  return {names, size};
+}
+/** เคยมีคนทำหน่วยงานนี้พร้อมกันกี่คนต่อวัน (มัธยฐานจากข้อมูลย้อนหลัง) — ใช้เป็นค่าแนะนำของกำลังคน */
+function planDeptTypicalWorkers(dept){
+  const byDay = new Map();
+  RAW.forEach(r=>{
+    if(r.dept !== dept || !r.date_iso || !r.employee) return;
+    if(!byDay.has(r.date_iso)) byDay.set(r.date_iso, new Set());
+    byDay.get(r.date_iso).add(r.employee);
+  });
+  if(!byDay.size) return null;
+  const med = planMedian([...byDay.values()].map(x=> x.size));
+  return med != null ? Math.max(1, Math.round(med)) : null;
+}
+
 /** รายชื่อพนักงานให้เลือกเป็นผู้รับผิดชอบ — จากชื่อที่เคยบันทึกงานไว้จริงในชีต (พิมพ์ชื่อใหม่เองก็ได้) */
 function planOwnerOptions(){
   return allEmployees.filter(Boolean);
@@ -2093,8 +2124,9 @@ function planOwnerOptions(){
 /**
  * คำนวณทั้งแผน — สองโหมด
  *   serial  : Item ขึ้นงานไล่ตามลำดับในแผน ขั้นตอนถัดไปเริ่มเมื่อขั้นก่อนหน้าเสร็จทั้งล็อต (แบบเดิม)
- *   overlap : หน่วยถัดไปเริ่มทันทีที่หน่วยก่อนหน้าผลิตของถึงเกณฑ์ (ของรอ = wipHours ชั่วโมงของกำลังผลิต
- *             หน่วยถัดไป) และคนหนึ่งคน/หน่วยงานหนึ่งหน่วยทำได้ทีละงาน งานถัดไปของคนนั้นจึงต่อคิวกันไป
+ *   overlap : ปล่อยงานตามเวลาที่ของพร้อมจริง — หน่วยถัดไปเริ่มทันทีที่หน่วยก่อนหน้าผลิตของถึงเกณฑ์
+ *             (ของรอ = wipHours ชั่วโมงของกำลังผลิตหน่วยถัดไป) งานไหนของพร้อมก่อนได้เข้าคิวก่อน
+ *             และหน่วยงานหนึ่งมีได้หลายคน/หลายเครื่อง งานจึงวิ่งไปหาคนที่ว่างเร็วที่สุดในหน่วยนั้น
  * ภายใน Item เดินย้อนจากขั้นตอนสุดท้ายไปต้นสาย เพราะการเผื่อของเสียทำให้ขั้นตอน
  * ก่อนหน้าต้องขึ้นงานมากกว่าจำนวนที่ต้องส่งมอบ ถ้าผู้ใช้พิมพ์จำนวน "ต้องทำ" เองที่
  * ขั้นตอนไหน ให้ยึดค่านั้นแล้วไล่ย้อนต่อจากค่านั้นขึ้นไป
@@ -2107,16 +2139,13 @@ function computePlan(){
 
   const seedP = startIso.split('-').map(Number);
   const seedDt = new Date(seedP[0], seedP[1]-1, seedP[2], Math.floor(shiftMin/60), shiftMin%60);
-  let cursor = planClampToShift(seedDt, hpd, shiftMin);   // เวลาจริง รวมเวลาเริ่มที่แก้เอง — ใช้แสดงวันที่/เวลาจริง
+  let cursor = planClampToShift(seedDt, hpd, shiftMin);   // ใช้เดินเวลาต่อกันในโหมดทำจบทีละขั้นเท่านั้น
   const startDt = new Date(cursor.getTime());
 
   const overlap = planState.flowMode !== 'serial';
   const wipHours = planState.wipHours >= 0 ? planState.wipHours : 1;
-  // คิวของผู้รับผิดชอบ — คนเดียว (หรือหน่วยงานเดียว ถ้ายังไม่ระบุชื่อคน) ทำสองงานพร้อมกันไม่ได้
-  // งานถัดไปของคนนั้นจึงเริ่มได้เร็วสุดตอนที่งานก่อนหน้าของเขาเสร็จ ข้ามทั้ง Item ในแผนเดียวกัน
-  const resourceFree = new Map();
-  const resourceKeyOf = (r)=> r.owner ? ('คน|' + r.owner) : ('หน่วย|' + r.step.dept);
 
+  // ---------- ผ่านที่ 1: จำนวนที่ต้องทำ อัตรา และชั่วโมงของแต่ละขั้นตอน (ยังไม่ผูกเวลา) ----------
   const jobs = planValidJobs().map(job=>{
     const qty = job.qty > 0 ? job.qty : 0;
     const main = job.steps.filter(s=> s.rank != null).map(s=>({step:s}));
@@ -2156,110 +2185,167 @@ function computePlan(){
       r.qty_manual = manual != null;
     });
 
-    function fillRow(r){
+    const fillRow = (r)=>{
       const {rate, src} = planStepRate(r.step, job);
       r.rate = rate;
       r.rate_src = src;
       r.stations = planStepStations(r.step, job);
       r.hours = (rate && rate > 0) ? r.qty_in/(rate*r.stations) : null;
       r.days = r.hours != null ? r.hours/hpd : null;
+      r.owner = planStepOwner(r.step, job);
+      r.assigned = [];
+    };
+    main.forEach(fillRow);
+    extra.forEach(fillRow);
+
+    return {job, main, extra, qty, mainStartQty};
+  });
+
+  // ---------- ผ่านที่ 2: จัดเวลา ----------
+  // ช่องงานของหน่วยงาน — หนึ่งช่อง = คน/เครื่องหนึ่งชุดที่รับงานได้ทีละหนึ่งงาน
+  // จำนวนช่องมาจากกำลังคนที่กรอกไว้ในตารางบาลานซ์ไลน์ (ค่าเริ่มต้น 1 = หน่วยนั้นทำได้ทีละงาน)
+  const pools = new Map();
+  const namedSlots = new Map();
+  function poolOf(dept){
+    if(!pools.has(dept)){
+      const {names, size} = planDeptPool(dept);
+      const arr = [];
+      for(let i = 0; i < size; i++){
+        arr.push({name: names[i] || '', label: names[i] || ('ช่อง #' + (i+1)), freeAt: new Date(startDt.getTime())});
+      }
+      pools.set(dept, arr);
     }
+    return pools.get(dept);
+  }
+  // ชื่อที่พิมพ์กำหนดเองในตาราง — ถ้าเป็นคนในรายชื่อของหน่วยนั้นก็ใช้คิวเดิมของเขา
+  // ถ้าไม่อยู่ในรายชื่อ ถือเป็นคนเพิ่มอีกหนึ่งคิว (คิวของเขาเองข้ามทุกหน่วยงาน)
+  function slotForName(dept, name){
+    const inPool = poolOf(dept).find(sl=> sl.name === name);
+    if(inPool) return inPool;
+    if(!namedSlots.has(name)) namedSlots.set(name, {name, label:name, freeAt: new Date(startDt.getTime()), adhoc:true});
+    return namedSlots.get(name);
+  }
 
-    const jobStartDt = new Date(cursor.getTime());
+  // เวลาที่ของจากหน่วยก่อนหน้า "ถึงเกณฑ์" — ไม่ต้องรอทั้งล็อต และถ้ามีหลายชิ้นส่วนป้อนเข้ามาก็รอชิ้นที่ช้าสุด
+  function feedInfo(r, prevRows){
+    let ready = new Date(startDt.getTime());
+    let prevEnd = null, waitQty = null;
+    const thisRate = (r.rate > 0) ? r.rate * r.stations : 0;
+    prevRows.forEach(prev=>{
+      if(!prev.start_dt) return;
+      const prevRate = (prev.rate > 0) ? prev.rate * prev.stations : 0;
+      let fedAt;
+      if(prevRate > 0 && thisRate > 0 && prev.end_dt){
+        const needQty = Math.min(prev.qty_in, wipHours * thisRate);
+        const fed = planAdvanceHours(prev.start_dt, needQty/prevRate, hpd, shiftMin);
+        fedAt = fed > prev.end_dt ? new Date(prev.end_dt.getTime()) : fed;
+        if(waitQty == null || needQty > waitQty) waitQty = needQty;
+      }else{
+        // ไม่มีอัตราการผลิตให้คิดจุดส่งของ — กลับไปรอให้ขั้นก่อนหน้าเสร็จก่อนตามเดิม
+        fedAt = new Date((prev.end_dt || prev.start_dt).getTime());
+      }
+      if(fedAt > ready) ready = fedAt;
+      if(prev.end_dt && (!prevEnd || prev.end_dt > prevEnd)) prevEnd = prev.end_dt;
+    });
+    return {ready, prevEnd, waitQty, prevDept: prevRows.length ? prevRows[0].step.dept : ''};
+  }
 
-    if(overlap){
-      // หน่วยก่อนหน้าของแต่ละแถว = ขั้นตอนก่อนหน้าที่สุดของ "งานตัวเดียวกัน" ในตาราง
-      // ขั้นตอนที่รวมชิ้นส่วน (เช่น ทากาว (ตัว+ขอบ)) รับของจากทุกแถวของหน่วยนั้น — ต้องรอครบทุกชิ้นส่วนถึงเริ่มได้
-      const prevRowsOf = new Map();
-      main.forEach((r, idx)=>{
+  // จับงานหนึ่งแถวลงช่องงานที่ว่างเร็วที่สุดของหน่วยนั้น (หรือคิวของคนที่ระบุชื่อไว้)
+  function placeRow(job, r, info){
+    const ov = job.overrides[r.step.key];
+    r.wait_qty = info.waitQty;
+    r.prev_dept = info.prevDept;
+
+    const manualNames = r.owner ? r.owner.split(',').map(x=> x.trim()).filter(Boolean) : [];
+    const slots = manualNames.length
+      ? manualNames.map(n=> slotForName(r.step.dept, n))
+      : [poolOf(r.step.dept).reduce((best, sl)=> (!best || sl.freeAt < best.freeAt) ? sl : best, null)].filter(Boolean);
+
+    let freeAt = new Date(startDt.getTime());
+    slots.forEach(sl=>{ if(sl.freeAt > freeAt) freeAt = new Date(sl.freeAt.getTime()); });
+
+    r.wait_resource = freeAt > info.ready;
+    let begin = r.wait_resource ? freeAt : new Date(info.ready.getTime());
+
+    // เวลาเริ่มที่ผู้ใช้พิมพ์เองมาก่อนเสมอ (ให้ตรงกับความเป็นจริงหน้างาน)
+    if(ov && ov.startAt){
+      const manualDt = new Date(ov.startAt);
+      if(!isNaN(manualDt.getTime())){
+        begin = manualDt;
+        r.wait_resource = false;
+        r.wait_qty = null;
+      }
+    }
+    r.start_override = !!(ov && ov.startAt);
+    r.start_dt = planClampToShift(begin, hpd, shiftMin);
+
+    if(r.hours != null){
+      let end = planAdvanceHours(r.start_dt, r.hours, hpd, shiftMin);
+      // หน่วยนี้เร็วกว่าหน่วยก่อนหน้า = ทำไปรอของไป เสร็จได้เร็วสุดคือหลังรับของก้อนสุดท้ายมาทำจนจบ
+      if(info.prevEnd && r.wait_qty != null && !r.start_override){
+        const tailEnd = planAdvanceHours(info.prevEnd, r.wait_qty/(r.rate*r.stations), hpd, shiftMin);
+        if(tailEnd > end){
+          end = tailEnd;
+          r.starved = true;   // ต้องรอของระหว่างทำ ไม่ได้เดินเครื่องต่อเนื่อง
+        }
+      }
+      r.end_dt = end;
+    }else{
+      r.end_dt = null;
+    }
+    slots.forEach(sl=>{ sl.freeAt = new Date((r.end_dt || r.start_dt).getTime()); });
+    // บอกว่างานตกที่ใคร — ช่องงานที่ไม่มีชื่อจะบอกเป็นหมายเลขช่อง เฉพาะตอนหน่วยนั้นมีหลายช่องเท่านั้น
+    const poolSize = manualNames.length ? 0 : poolOf(r.step.dept).length;
+    r.assigned = slots.map(sl=> sl.name ? sl.name : (poolSize > 1 ? sl.label : '')).filter(Boolean);
+    r.tl_start = r.start_dt;
+    r.tl_end = r.end_dt;
+  }
+
+  function scheduleOverlap(){
+    // งานทุกแถวของทุก Item อยู่ในกองเดียวกัน แล้วปล่อยทีละงานตามลำดับ "ของพร้อมก่อนได้ก่อน"
+    // (ของพร้อมพร้อมกัน ให้ Item ที่อยู่บนกว่าในแผนได้ก่อน) — ไม่ใช่ไล่ทีละ Item เป็นรถไฟ
+    const tasks = [];
+    jobs.forEach(jp=>{
+      jp.main.forEach((r, idx)=>{
         const fam = planMaterialFamily(r.step.material);
         let prevDept = null;
         for(let j = idx-1; j >= 0; j--){
-          if(planMaterialFamily(main[j].step.material) === fam && main[j].step.dept !== r.step.dept){
-            prevDept = main[j].step.dept;
+          if(planMaterialFamily(jp.main[j].step.material) === fam && jp.main[j].step.dept !== r.step.dept){
+            prevDept = jp.main[j].step.dept;
             break;
           }
         }
-        if(prevDept == null) return;
-        const rows = [];
-        for(let j = 0; j < idx; j++){
-          if(main[j].step.dept === prevDept && planMaterialFamily(main[j].step.material) === fam) rows.push(main[j]);
-        }
-        if(rows.length) prevRowsOf.set(idx, rows);
+        const prevRows = prevDept == null ? []
+          : jp.main.filter((p, j)=> j < idx && p.step.dept === prevDept && planMaterialFamily(p.step.material) === fam);
+        tasks.push({job: jp.job, r, prevRows, done:false});
       });
+    });
+    const taskOfRow = new Map(tasks.map(t=> [t.r, t]));
 
-      main.forEach((r, idx)=>{
-        fillRow(r);
-        r.owner = planStepOwner(r.step, job);
-        const ov = job.overrides[r.step.key];
-        const prevRows = prevRowsOf.get(idx) || [];
+    let left = tasks.length, guard = 0;
+    while(left > 0 && guard++ < 5000){
+      let best = null, bestInfo = null;
+      for(const t of tasks){
+        if(t.done) continue;
+        if(t.prevRows.some(p=>{ const pt = taskOfRow.get(p); return pt && !pt.done; })) continue;   // ยังรอขั้นก่อนหน้า
+        const info = feedInfo(t.r, t.prevRows);
+        if(!best || info.ready < bestInfo.ready){ best = t; bestInfo = info; }
+      }
+      if(!best){   // อ้างวนกันเอง (ไม่ควรเกิด) — ปล่อยตามลำดับตารางเพื่อไม่ให้ค้าง
+        best = tasks.find(t=> !t.done);
+        bestInfo = feedInfo(best.r, best.prevRows.filter(p=> taskOfRow.get(p).done));
+      }
+      placeRow(best.job, best.r, bestInfo);
+      best.done = true;
+      left--;
+    }
+  }
 
-        // เวลาที่ "ของถึงเกณฑ์" — หน่วยก่อนหน้าผลิตได้พอให้หน่วยนี้เดินต่อเนื่องแล้ว เริ่มได้เลยไม่ต้องรอทั้งล็อต
-        // มีหลายชิ้นส่วนป้อนเข้ามาก็ต้องรอชิ้นส่วนที่มาถึงช้าที่สุด
-        let ready = new Date(startDt.getTime());
-        let prevEndDt = null;
-        r.wait_qty = null;
-        r.prev_dept = prevRows.length ? prevRows[0].step.dept : '';
-        const thisRate = (r.rate > 0) ? r.rate * r.stations : 0;
-        prevRows.forEach(prev=>{
-          if(!prev.start_dt) return;
-          const prevRate = (prev.rate > 0) ? prev.rate * prev.stations : 0;
-          let fedAt;
-          if(prevRate > 0 && thisRate > 0 && prev.end_dt){
-            const needQty = Math.min(prev.qty_in, wipHours * thisRate);
-            const fed = planAdvanceHours(prev.start_dt, needQty/prevRate, hpd, shiftMin);
-            fedAt = fed > prev.end_dt ? new Date(prev.end_dt.getTime()) : fed;
-            if(r.wait_qty == null || needQty > r.wait_qty) r.wait_qty = needQty;
-          }else{
-            // ไม่มีอัตราการผลิตให้คิดจุดส่งของ — กลับไปรอให้ขั้นก่อนหน้าเสร็จก่อนตามเดิม
-            fedAt = new Date((prev.end_dt || prev.start_dt).getTime());
-          }
-          if(fedAt > ready) ready = fedAt;
-          if(prev.end_dt && (!prevEndDt || prev.end_dt > prevEndDt)) prevEndDt = prev.end_dt;
-        });
-
-        const rkey = resourceKeyOf(r);
-        const free = resourceFree.get(rkey);
-        r.wait_resource = !!(free && free > ready);
-        let begin = r.wait_resource ? new Date(free.getTime()) : ready;
-
-        // เวลาเริ่มที่ผู้ใช้พิมพ์เองมาก่อนเสมอ (ให้ตรงกับความเป็นจริงหน้างาน)
-        if(ov && ov.startAt){
-          const manualDt = new Date(ov.startAt);
-          if(!isNaN(manualDt.getTime())){
-            begin = manualDt;
-            r.wait_resource = false;
-            r.wait_qty = null;
-          }
-        }
-        r.start_override = !!(ov && ov.startAt);
-        r.start_dt = planClampToShift(begin, hpd, shiftMin);
-
-        if(r.hours != null){
-          let end = planAdvanceHours(r.start_dt, r.hours, hpd, shiftMin);
-          // หน่วยนี้เร็วกว่าหน่วยก่อนหน้า = ทำไปรอของไป เสร็จได้เร็วสุดคือหลังรับของก้อนสุดท้ายมาทำจนจบ
-          if(prevEndDt && r.wait_qty != null && !r.start_override){
-            const tailEnd = planAdvanceHours(prevEndDt, r.wait_qty/(r.rate*r.stations), hpd, shiftMin);
-            if(tailEnd > end){
-              end = tailEnd;
-              r.starved = true;   // ต้องรอของระหว่างทำ ไม่ได้เดินเครื่องต่อเนื่อง
-            }
-          }
-          r.end_dt = end;
-        }else{
-          r.end_dt = null;
-        }
-        resourceFree.set(rkey, r.end_dt || r.start_dt);
-        r.tl_start = r.start_dt;
-        r.tl_end = r.end_dt;
-      });
-    }else{
-      main.forEach(r=>{
-        fillRow(r);
-        r.owner = planStepOwner(r.step, job);
-
+  function scheduleSerial(){
+    jobs.forEach(jp=>{
+      jp.main.forEach(r=>{
         // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
-        const ov = job.overrides[r.step.key];
+        const ov = jp.job.overrides[r.step.key];
         if(ov && ov.startAt){
           const manualDt = new Date(ov.startAt);
           if(!isNaN(manualDt.getTime())) cursor = planClampToShift(manualDt, hpd, shiftMin);
@@ -2272,20 +2358,24 @@ function computePlan(){
         r.tl_start = r.start_dt;
         r.tl_end = r.end_dt;
       });
-    }
+    });
+  }
 
-    // จุดเริ่ม/จุดจบจริงของ Item นี้ — คิดจากขั้นตอนที่เริ่มเร็วสุดและเสร็จช้าสุด เพราะในโหมดส่งต่อระหว่างทำ
-    // ขั้นตอนต่างๆ ทับซ้อนกัน ขั้นตอนสุดท้ายในตารางจึงไม่จำเป็นต้องเป็นขั้นที่เสร็จทีหลังสุดเสมอไป
+  if(overlap) scheduleOverlap(); else scheduleSerial();
+
+  // ---------- ผ่านที่ 3: สรุปผลของแต่ละ Item ----------
+  const jobResults = jobs.map(jp=>{
+    const {job, main, extra, qty, mainStartQty} = jp;
+
+    // จุดเริ่ม/จุดจบจริงของ Item นี้ — คิดจากขั้นตอนที่เริ่มเร็วสุดและเสร็จช้าสุด เพราะขั้นตอนต่างๆ ทับซ้อนกันได้
     let jobRealStartDt = null, jobEndDt = null;
     main.forEach(r=>{
       if(r.start_dt && (!jobRealStartDt || r.start_dt < jobRealStartDt)) jobRealStartDt = r.start_dt;
       if(r.end_dt && (!jobEndDt || r.end_dt > jobEndDt)) jobEndDt = r.end_dt;
     });
-    if(!jobRealStartDt) jobRealStartDt = jobStartDt;
+    if(!jobRealStartDt) jobRealStartDt = new Date(startDt.getTime());
     // ขั้นตอนแยกทำเมื่อไรก็ได้ ไม่ผูกวันที่จริงให้ (ตารางแสดง "—") แต่ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
     extra.forEach(r=>{
-      fillRow(r);
-      r.owner = planStepOwner(r.step, job);
       r.start_dt = null;
       r.end_dt = null;
       r.tl_start = jobRealStartDt;
@@ -2306,10 +2396,10 @@ function computePlan(){
     };
   });
 
-  const agg = (key)=> jobs.reduce((s,j)=> s + (j[key]||0), 0);
+  const agg = (key)=> jobResults.reduce((s,j)=> s + (j[key]||0), 0);
   // คอขวดคิดจากสายหลัก เพราะเป็นตัวกำหนดวันที่เสร็จ ขั้นตอนแยกไม่ได้ขวางสายการผลิต
   let bottleneck = null;
-  jobs.forEach(j=>{
+  jobResults.forEach(j=>{
     (j.main.length ? j.main : j.extra).forEach(r=>{
       if(r.hours != null && (!bottleneck || r.hours > bottleneck.row.hours)) bottleneck = {row:r, job:j.job};
     });
@@ -2317,14 +2407,67 @@ function computePlan(){
 
   // โหมดส่งต่อระหว่างทำ: ทั้งแผนเสร็จเมื่อ Item ที่เสร็จช้าสุดเสร็จ (งานหลาย Item เดินทับซ้อนกันได้)
   const finishDt = overlap
-    ? (jobs.reduce((mx, j)=> (j.end_dt && (!mx || j.end_dt > mx)) ? j.end_dt : mx, null) || new Date(startDt.getTime()))
+    ? (jobResults.reduce((mx, j)=> (j.end_dt && (!mx || j.end_dt > mx)) ? j.end_dt : mx, null) || new Date(startDt.getTime()))
     : new Date(cursor.getTime());
   const spanHours = planWorkingHoursBetween(startDt, finishDt, hpd, shiftMin);
 
+  // ---------- บาลานซ์ไลน์: โหลดงานของแต่ละหน่วยงานเทียบกำลังคนที่มี ----------
+  const loadByDept = new Map();
+  jobResults.forEach(jp=> jp.main.forEach(r=>{
+    if(r.hours == null) return;
+    const cur = loadByDept.get(r.step.dept) || {dept: r.step.dept, hours: 0, rows: 0};
+    cur.hours += r.hours;
+    cur.rows++;
+    loadByDept.set(r.step.dept, cur);
+  }));
+  const totalLoad = [...loadByDept.values()].reduce((s,d)=> s + d.hours, 0);
+  const totalSlots = [...loadByDept.keys()].reduce((s,d)=> s + planDeptPool(d).size, 0);
+  const balance = [...loadByDept.values()].map(d=>{
+    const pool = planDeptPool(d.dept);
+    return {
+      dept: d.dept, hours: d.hours, rows: d.rows, slots: pool.size, names: pool.names,
+      typical: planDeptTypicalWorkers(d.dept),
+      perSlot: d.hours / pool.size,
+      util: spanHours > 0 ? (d.hours / pool.size)/spanHours : null,
+      suggest: pool.size
+    };
+  }).sort((a,b)=> b.perSlot - a.perSlot);
+
+  // ข้อเสนอบาลานซ์ไลน์ — แบ่ง "กำลังคนรวมที่มีอยู่ตอนนี้" ใหม่ตามสัดส่วนโหลดงาน (ทุกหน่วยอย่างน้อย 1 คน)
+  // จงใจไม่เสนอให้เพิ่มคนรวม เพราะกำลังคนรวมเป็นของจริงที่โรงงานมี — คนที่เกินอยู่หน่วยเบาคือคนที่ย้ายมาช่วยคอขวดได้
+  const balanceTarget = totalSlots > 0 ? totalLoad/totalSlots : 0;
+  if(totalLoad > 0 && balance.length){
+    const quota = balance.map(b=> totalSlots * b.hours / totalLoad);
+    balance.forEach((b,i)=>{ b.suggest = Math.max(1, Math.floor(quota[i])); });
+    let used = balance.reduce((sum,b)=> sum + b.suggest, 0);
+    // ยังเหลือคน → ให้หน่วยที่เศษเหลือมากที่สุดก่อน
+    const rank = quota.map((q,i)=> ({i, frac: q - Math.floor(q)})).sort((a,b)=> b.frac - a.frac);
+    for(let k = 0; used < totalSlots && k < rank.length; k++){
+      balance[rank[k].i].suggest++;
+      used++;
+    }
+    // แจกเกินเพราะทุกหน่วยต้องมีอย่างน้อย 1 คน → ถอนคืนจากหน่วยที่ถอนแล้วเจ็บน้อยที่สุด
+    // (ถอนแล้วภาระต่อคนยังต่ำสุด) จนกำลังคนรวมเท่าของจริง ข้อเสนอจึงนิ่ง กดปุ่มซ้ำก็ได้ค่าเดิม
+    for(let guard = 0; used > totalSlots && guard < 200; guard++){
+      let pick = null;
+      balance.forEach(b=>{
+        if(b.suggest <= 1) return;
+        const after = b.hours/(b.suggest - 1);
+        if(!pick || after < pick.after) pick = {b, after};
+      });
+      if(!pick) break;
+      pick.b.suggest--;
+      used--;
+    }
+  }
+  const slowestPerSlot = balance.length ? balance[0].perSlot : 0;
+  balance.forEach(b=> b.isBottleneck = slowestPerSlot > 0 && b.perSlot >= slowestPerSlot - 1e-9);
+
   return {
-    jobs, startIso, hpd, overlap, wipHours,
+    jobs: jobResults, startIso, hpd, overlap, wipHours,
     spanHours, spanDays: spanHours/hpd,
-    hasExtra: jobs.some(j=> j.extra.length > 0),
+    balance, totalSlots, balanceTarget,
+    hasExtra: jobResults.some(j=> j.extra.length > 0),
     qty: agg('qty'),
     startQty: agg('startQty'),
     mainHours: agg('mainHours'),
@@ -2334,7 +2477,7 @@ function computePlan(){
     totalDays: agg('totalHours')/hpd,
     startDt,
     finishDt,
-    missingRate: jobs.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
+    missingRate: jobResults.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
     bottleneck
   };
 }
@@ -2534,7 +2677,7 @@ function planExportExcel(){
       }
       detailRows.push([
         i+1, jp.job.item, jp.qty, kind, no || '', r.step.dept,
-        r.step.material || '', r.owner || '', r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'ไม่มีข้อมูล',
+        r.step.material || '', r.owner || (r.assigned || []).join(', '), r.rate != null ? planRound2(r.rate) : '', r.rate_src ? (PLAN_RATE_SRC_LABEL[r.rate_src]||'') : 'ไม่มีข้อมูล',
         r.stations, Math.round(r.qty_in), r.hours != null ? planRound2(r.hours) : '', r.days != null ? planRound2(r.days) : '',
         r.start_dt ? planFmtDateTime(r.start_dt) : '', r.end_dt ? planFmtDateTime(r.end_dt) : '', startWhy, r.step.n
       ]);
@@ -2543,9 +2686,23 @@ function planExportExcel(){
     jp.extra.forEach(r=> pushRow(r, '', 'ขั้นตอนแยก'));
   });
 
+  const balanceRows = [
+    ['ภาระเฉลี่ยเป้าหมาย (ชม./คน)', planRound2(plan.balanceTarget)],
+    ['กำลังคนรวมที่ใช้คำนวณ (คน)', plan.totalSlots],
+    [],
+    ['หน่วยงาน','ทำพร้อมกันได้ (งาน)','รายชื่อ','โหลดงาน (ชม.)','ชม./คน','% ของช่วงแผน','คนที่ควรมีเพื่อเดินทันไลน์','คอขวด']
+  ];
+  plan.balance.forEach(b=>{
+    balanceRows.push([
+      b.dept, b.slots, b.names.join(', '), planRound2(b.hours), planRound2(b.perSlot),
+      b.util != null ? planRound2(b.util*100) : '', b.suggest, b.isBottleneck ? 'คอขวด' : ''
+    ]);
+  });
+
   const blob = planBuildXlsx([
     {name:'สรุปแผนผลิต', rows: summaryRows},
-    {name:'รายละเอียดขั้นตอน', rows: detailRows}
+    {name:'รายละเอียดขั้นตอน', rows: detailRows},
+    {name:'กำลังคนและบาลานซ์', rows: balanceRows}
   ]);
   const safe = (planState.po || planState.customer || 'plan').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'plan';
   planDownloadBlob(blob, `แผนผลิต_${safe}_${planTodayIso()}.xlsx`);
@@ -2595,6 +2752,7 @@ function planSnapshotCurrent(){
     rateBasis: planState.rateBasis,
     flowMode: planState.flowMode,
     wipHours: planState.wipHours,
+    capacity: planState.capacity,
     jobs: planValidJobs().map(j=> ({
       item: j.item, qty: j.qty, order: j.order || [], manualSteps: j.manualSteps || [],
       overrides: j.overrides || {}
@@ -2633,6 +2791,7 @@ function planApplySnapshotToState(entry){
   // แผนที่บันทึกไว้ก่อนมีโหมดส่งต่อระหว่างทำ ให้เปิดกลับมาแบบเดิม (ทำจบทีละขั้น) ผลลัพธ์จะได้ไม่เพี้ยนจากที่เคยเห็น
   planState.flowMode = entry.flowMode || 'serial';
   planState.wipHours = (typeof entry.wipHours === 'number' && entry.wipHours >= 0) ? entry.wipHours : 1;
+  planState.capacity = (entry.capacity && typeof entry.capacity === 'object') ? entry.capacity : {};
   planState.jobs = (entry.jobs || []).map(j=> ({
     uid: ++planJobUid,
     item: j.item || '',
@@ -2838,7 +2997,8 @@ function renderPlanner(){
       <td>
         <input class="plan-cell-input plan-owner-input${r.owner ? ' manual' : ''}" type="text" list="planOwnerList"
                data-field="owner" data-job="${job.uid}" data-key="${stepKey}"
-               value="${escapeHtml(r.owner || '').replace(/"/g,'&quot;')}" placeholder="ยังไม่ระบุ" title="ใครรับผิดชอบขั้นตอนนี้ — คนเดียวกันจะไม่ถูกจัดให้ทำสองงานพร้อมกัน">
+               value="${escapeHtml(r.owner || '').replace(/"/g,'&quot;')}" placeholder="${plan.overlap ? 'จัดให้อัตโนมัติ' : 'ยังไม่ระบุ'}" title="ใครรับผิดชอบขั้นตอนนี้ — คนเดียวกันจะไม่ถูกจัดให้ทำสองงานพร้อมกัน ปล่อยว่างไว้ระบบจะเลือกคนที่ว่างเร็วที่สุดในหน่วยนั้นให้">
+        ${!r.owner && plan.overlap && r.assigned && r.assigned.length ? `<div class="plan-src">จัดให้: ${escapeHtml(r.assigned.join(', '))}</div>` : ''}
       </td>
       <td class="num">
         <input class="plan-cell-input${r.rate_src === 'manual' ? ' manual' : ''}" type="number" min="0" step="1" data-field="rate" data-job="${job.uid}" data-key="${stepKey}" value="${r.rate != null ? Math.round(r.rate*100)/100 : ''}">
@@ -2957,6 +3117,64 @@ function renderPlanner(){
       </div>
     </div>`;
   };
+  // แผงกำลังคนของแต่ละหน่วยงาน — กรอกว่าหน่วยนั้นรับงานพร้อมกันได้กี่งาน แล้วดูว่าโหลดงานสมดุลกันไหม
+  const balanceHtml = plan.balance.length ? `
+    <div class="panel" style="margin-top:16px;">
+      <h2>กำลังคนและบาลานซ์ไลน์</h2>
+      <div class="panel-note">${plan.overlap
+          ? 'กรอกว่าแต่ละหน่วยงานรับงานพร้อมกันได้กี่งาน (กี่คน/กี่ชุดเครื่อง) ระบบจะส่งงานที่พร้อมแล้วไปหาคนที่ว่างเร็วที่สุดในหน่วยนั้นให้เอง — ใส่รายชื่อไว้ก็จะรู้ว่างานไหนตกที่ใคร · ภาระเฉลี่ยของทั้งไลน์ตอนนี้คือ ' + fmtHM(plan.balanceTarget) + ' ชม./คน (โหลดงานรวม ÷ กำลังคนรวม ' + plan.totalSlots + ' คน)'
+          : 'ตัวเลขกำลังคนใช้เฉพาะโหมด “ส่งต่อระหว่างทำ” — ตอนนี้เลือกโหมดทำจบทีละขั้นอยู่ ตารางนี้จึงบอกได้แค่โหลดงานของแต่ละหน่วย'}</div>
+      <div class="table-wrap">
+        <table class="plan-step-table plan-balance-table">
+          <thead>
+            <tr>
+              <th>หน่วยงาน</th>
+              <th class="num">ทำพร้อมกันได้ (งาน)</th>
+              <th>รายชื่อ (ไม่บังคับ)</th>
+              <th class="num">โหลดงาน (ชม.)</th>
+              <th class="num">ชม./คน</th>
+              <th class="num">% ของช่วงแผน</th>
+              <th>บาลานซ์</th>
+            </tr>
+          </thead>
+          <tbody>${plan.balance.map(b=>{
+            const c = getDeptColor(b.dept);
+            const deptAttr = escapeHtml(b.dept).replace(/"/g,'&quot;');
+            const namesVal = escapeHtml(b.names.join(', ')).replace(/"/g,'&quot;');
+            const advice = b.suggest !== b.slots
+              ? `<span class="plan-src ${b.suggest > b.slots ? 'manual' : ''}">ควรมี ${b.suggest} คน ${b.suggest > b.slots ? '(ดึงมาเพิ่มอีก ' + (b.suggest - b.slots) + ')' : '(เกินอยู่ ' + (b.slots - b.suggest) + ' — ย้ายไปช่วยหน่วยอื่นได้)'}</span>`
+              : (b.isBottleneck
+                  ? '<span class="plan-src plan-bottleneck">กำลังคนที่มีจัดได้เท่านี้ — เพิ่มคนที่หน่วยนี้ลดเวลาได้มากที่สุด</span>'
+                  : '<span class="plan-src">พอดีกับกำลังคนที่มี</span>');
+            return `<tr>
+              <td>
+                <span class="prod-dept-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${escapeHtml(b.dept)}</span>
+                ${b.isBottleneck ? '<div class="plan-src plan-bottleneck">คอขวดของไลน์</div>' : ''}
+              </td>
+              <td class="num">
+                <input class="plan-cap-input" type="number" min="1" max="99" step="1" data-capdept="${deptAttr}" data-capfield="workers"
+                       value="${b.slots}"${b.names.length ? ' disabled title="นับจากรายชื่อที่กรอกไว้"' : ''}>
+              </td>
+              <td>
+                <input class="plan-cap-input plan-cap-names" type="text" list="planOwnerList" data-capdept="${deptAttr}" data-capfield="names"
+                       value="${namesVal}" placeholder="เช่น สมชาย, สมหญิง">
+                ${b.typical ? `<div class="plan-src">ย้อนหลังทำหน่วยนี้ ~${b.typical} คน/วัน</div>` : ''}
+              </td>
+              <td class="num mono">${fmtHM(b.hours)}</td>
+              <td class="num mono">${fmtHM(b.perSlot)}</td>
+              <td class="num mono">${b.util != null ? fmtNum(b.util*100,0) + '%' : '—'}</td>
+              <td>${advice}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+      <div class="plan-actions">
+        <button class="connect-btn ghost" data-capfill="1">เติมกำลังคนจากข้อมูลย้อนหลัง</button>
+        <button class="connect-btn ghost" data-capbalance="1" title="แบ่งกำลังคนรวมเท่าที่มีอยู่ใหม่ตามสัดส่วนโหลดงาน">จัดกำลังคนให้สมดุล (กำลังคนรวมเท่าเดิม)</button>
+        <button class="connect-btn ghost" data-capreset="1">ล้างเป็นหน่วยละ 1</button>
+      </div>
+    </div>` : '';
+
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>ไทม์ไลน์โดยประมาณ</h2>
@@ -2979,11 +3197,17 @@ function renderPlanner(){
         <li><b>การส่งงานระหว่างหน่วย</b> — ${plan.overlap
             ? `เลือกไว้แบบ <b>ส่งต่อระหว่างทำ</b>: หน่วยถัดไปไม่ต้องรอหน่วยก่อนหน้าทำครบทั้งล็อต แต่เริ่มทันทีที่หน่วยก่อนหน้าผลิตของได้ถึงเกณฑ์ที่ตั้งไว้ (${fmtNum(plan.wipHours,2)} ชม. ของกำลังผลิตหน่วยถัดไป — แก้ได้ที่ช่อง “ของรอหน้าหน่วยถัดไป” ด้านบน) ถ้าหน่วยถัดไปเร็วกว่าหน่วยก่อนหน้า จะทำไปรอของไป จึงเสร็จได้เร็วสุดหลังรับของก้อนสุดท้ายมาทำจนจบ`
             : `เลือกไว้แบบ <b>ทำจบทีละขั้น</b>: หน่วยถัดไปเริ่มเมื่อหน่วยก่อนหน้าทำครบทั้งล็อตแล้ว และ Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ`}</li>
-        <li><b>ผู้รับผิดชอบ</b> — พิมพ์ชื่อคน (หรือทีม) ที่รับผิดชอบได้ทีละขั้นตอนในตาราง ${plan.overlap
-            ? 'คนเดียวกันจะไม่ถูกจัดให้ทำสองงานพร้อมกัน งานถัดไปของเขาจึงต่อคิวจากงานเดิม (ข้าม Item ในแผนเดียวกันด้วย) ขั้นตอนที่ยังไม่ระบุชื่อจะคิดคิวรวมที่หน่วยงานนั้นแทน คือหน่วยงานหนึ่งทำได้ทีละงาน — แยกชื่อคนคนละคนให้ขั้นตอนที่ทำขนานกันได้จริง แล้วงานจะเดินพร้อมกัน'
+        <li><b>กำลังคนของหน่วยงาน (capacity)</b> — ${plan.overlap
+            ? `แต่ละหน่วยงานรับงานพร้อมกันได้เท่าจำนวนคน/ชุดเครื่องที่กรอกไว้ในตาราง “กำลังคนและบาลานซ์ไลน์” (ค่าเริ่มต้นหน่วยละ 1 งาน) งานที่ของพร้อมแล้วจะวิ่งไปหา<b>ช่องงานที่ว่างเร็วที่สุด</b>ของหน่วยนั้นทันที ไม่ได้ต่อคิวตามลำดับในตาราง ถ้าของพร้อมพร้อมกันหลายงาน Item ที่อยู่บนกว่าในแผนได้ก่อน · ปุ่มด้านล่างตารางเติมกำลังคนจากข้อมูลย้อนหลังหรือจัดให้สมดุลอัตโนมัติได้`
+            : 'ใช้เฉพาะโหมดส่งต่อระหว่างทำ'}</li>
+        <li><b>บาลานซ์ไลน์</b> — ${plan.overlap
+            ? `“ชม./คน” คือโหลดงานของหน่วยนั้นหารด้วยกำลังคนที่มี หน่วยที่สูงที่สุดคือคอขวดที่กำหนดวันเสร็จของทั้งแผน · คอลัมน์บาลานซ์เสนอวิธีแบ่ง<b>กำลังคนรวมเท่าที่มีอยู่</b> (${plan.totalSlots} คน) ใหม่ตามสัดส่วนโหลดงาน ทุกหน่วยอย่างน้อย 1 คน — หน่วยที่คนเกินคือคนที่ย้ายไปช่วยหน่วยคอขวดได้ ถ้าจัดเต็มที่แล้วคอขวดยังสูงอยู่ แปลว่าต้องเพิ่มคนเข้าไลน์จริง ไม่ใช่แค่สลับที่กัน`
+            : 'ดูโหลดงานของแต่ละหน่วยได้ในตารางด้านล่าง แต่ยังไม่มีผลกับเวลาในโหมดนี้'}</li>
+        <li><b>ผู้รับผิดชอบ</b> — ปล่อยว่างไว้ระบบจะเลือกคนที่ว่างเร็วที่สุดในหน่วยนั้นให้เอง (ถ้ากรอกรายชื่อไว้จะขึ้นว่า “จัดให้: ชื่อ”) ${plan.overlap
+            ? 'หรือพิมพ์ชื่อทับเองก็ได้ — ชื่อที่พิมพ์เองจะถูกล็อกให้คนนั้น และคนคนเดียวจะไม่ถูกจัดให้ทำสองงานพร้อมกัน คิวของเขาต่อกันข้าม Item ในแผนเดียวกันด้วย พิมพ์หลายชื่อคั่นด้วยจุลภาคได้ถ้างานนั้นทำด้วยกันหลายคน (ชื่อที่ไม่อยู่ในรายชื่อของหน่วยนั้นถือเป็นคนเพิ่มมาอีกหนึ่งคิว)'
             : 'ชื่อที่กรอกไว้จะถูกบันทึกและส่งออกไปกับแผน แต่โหมด “ทำจบทีละขั้น” ไม่ได้คิดคิวของแต่ละคน — เปลี่ยนเป็นโหมดส่งต่อระหว่างทำถ้าต้องการให้คิวคนมีผลกับเวลา'}</li>
         <li><b>ลำดับ Item</b> — ${plan.overlap
-            ? 'Item ที่อยู่บนสุดได้คิวก่อนเมื่อแย่งคน/หน่วยงานเดียวกัน แต่ Item ที่ไม่ได้ใช้คนซ้ำกันเดินขนานกันได้'
+            ? 'ทุก Item เริ่มพร้อมกันได้ถ้ากำลังคนพอ ลำดับในแผนใช้ตัดสินเฉพาะตอนงานพร้อมพร้อมกันแล้วต้องแย่งคนกัน (Item ที่อยู่บนกว่าได้ก่อน)'
             : 'Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)'} สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง</li>
         <li><b>ลำดับขั้นตอน</b> — ในชีตไม่มีคอลัมน์ลำดับขั้นตอน (step order) ระบบจึงใช้ลำดับมาตรฐานของสายหลัก: รีด → ปั๊ม → เปเปอร์ → ตัดยาง → ทากาว → เจียร์ → เจียร์(หยาบ) → เจียร์(ละเอียด) → เจาะ โดยเจียร์(หยาบ)/(ละเอียด) ทำเฉพาะบอลบางไซส์ — ปรับลำดับด้วยปุ่ม ▲▼ ได้</li>
         <li><b>Item ที่เป็นเซ็ต (หลายชิ้นส่วน)</b> — ถ้า Item เดียวกันมีมากกว่า 1 ชิ้นส่วน/วัตถุดิบผ่านหน่วยงานเดียวกัน (เช่น เจียร์บอล กับ เจียร์พิน ของเซ็ตลูกโบว์ลิ่ง) ระบบจะแยกเป็นคนละแถวให้อัตโนมัติตามชื่อวัตถุดิบ แล้วทำให้ครบทุกขั้นตอนของชิ้นส่วนหนึ่งก่อน จึงขึ้นชิ้นส่วนถัดไป (ไม่ทำสลับข้ามชิ้นส่วนกัน)</li>
@@ -2997,7 +3221,7 @@ function renderPlanner(){
       </ul>
     </div>`;
 
-  box.innerHTML = staleHtml + kpiHtml + jobsHtml + timelineHtml + assumeHtml;
+  box.innerHTML = staleHtml + kpiHtml + jobsHtml + balanceHtml + timelineHtml + assumeHtml;
 }
 
 /** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
@@ -3228,6 +3452,30 @@ function refreshPlanner(){
       renderPlanner();
       return;
     }
+    // ปุ่มใต้ตารางกำลังคน — เติมจากข้อมูลย้อนหลัง / จัดให้สมดุล / ล้างเป็นหน่วยละ 1
+    const capBtn = e.target.closest('[data-capfill], [data-capbalance], [data-capreset]');
+    if(capBtn){
+      if(!planState.capacity) planState.capacity = {};
+      const depts = [...new Set(planValidJobs().flatMap(j=> j.steps.filter(st=> st.rank != null).map(st=> st.dept)))];
+      if(capBtn.hasAttribute('data-capreset')){
+        depts.forEach(d=>{ planState.capacity[d] = {workers: 1, names: ''}; });
+      }else if(capBtn.hasAttribute('data-capfill')){
+        depts.forEach(d=>{
+          const cur = planState.capacity[d] || {};
+          planState.capacity[d] = {workers: planDeptTypicalWorkers(d) || 1, names: cur.names || ''};
+        });
+      }else{
+        // กระจายกำลังคนรวมเท่าเดิมตามสัดส่วนโหลดงาน — รายชื่อที่กรอกไว้กำหนดจำนวนคนอยู่แล้ว
+        // ถ้าจำนวนที่ควรมีไม่ตรงกับจำนวนรายชื่อ ต้องล้างรายชื่อทิ้งไม่งั้นตัวเลขใหม่ไม่มีผล
+        computePlan().balance.forEach(b=>{
+          const cur = planState.capacity[b.dept] || {};
+          const keepNames = b.names.length === b.suggest ? (cur.names || '') : '';
+          planState.capacity[b.dept] = {workers: b.suggest, names: keepNames};
+        });
+      }
+      renderPlanner();
+      return;
+    }
     const btn = e.target.closest('.plan-move[data-move]');
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
@@ -3243,6 +3491,22 @@ function refreshPlanner(){
   });
   // ใช้ change ไม่ใช่ input — ตารางถูกวาดใหม่ทุกครั้งที่ค่าเปลี่ยน ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
   box.addEventListener('change', (e)=>{
+    // กำลังคนของหน่วยงาน (ตารางบาลานซ์ไลน์) — เก็บแยกจากค่าของแต่ละแถวในตารางขั้นตอน
+    const capInp = e.target.closest('[data-capdept]');
+    if(capInp){
+      if(!planState.capacity) planState.capacity = {};
+      const dept = capInp.getAttribute('data-capdept');
+      const cur = planState.capacity[dept] || {};
+      if(capInp.getAttribute('data-capfield') === 'names'){
+        cur.names = capInp.value;
+      }else{
+        const v = parseFloat(capInp.value);
+        cur.workers = (isNaN(v) || v < 1) ? 1 : Math.min(99, Math.round(v));
+      }
+      planState.capacity[dept] = cur;
+      renderPlanner();
+      return;
+    }
     const inp = e.target.closest('.plan-cell-input');
     if(!inp) return;
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
