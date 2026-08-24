@@ -529,6 +529,15 @@
     padding:6px 10px 8px;font-family:var(--mono);font-size:10px;color:var(--text-faint);
     border-bottom:1px solid var(--border);margin-bottom:4px;
   }
+  /* Custom dropdown for the plan Item field — native <datalist> doesn't render a real
+     listbox on mobile Safari (only a truncated QuickType-style bar above the keyboard),
+     so this row's suggestions use the same combobox styling positioned via JS instead. */
+  .plan-item-dropdown{
+    display:none;position:fixed;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:10px;padding:6px;max-height:260px;overflow-y:auto;z-index:200;
+    box-shadow:0 12px 30px rgba(0,0,0,.45);
+  }
+  .plan-item-dropdown.open{display:block;}
   /* Production planner (คำนวณแผนผลิต) */
   .plan-num{min-width:130px;width:100%;text-align:right;font-family:var(--mono);}
   .plan-num::-webkit-calendar-picker-indicator{filter:invert(.7);}
@@ -801,7 +810,7 @@
       <h2>รายการ Item ที่ต้องผลิต</h2>
       <div class="panel-note">กรอกรหัส Item และจำนวน — กด “+ เพิ่ม Item” เพื่อเพิ่มอีกกล่อง จัดลำดับการขึ้นงานด้วยปุ่ม ▲▼ แล้วกด “คำนวณเวลาในการผลิต”</div>
       <div class="plan-rows" id="planItemRows"></div>
-      <datalist id="planItemList"></datalist>
+      <div class="plan-item-dropdown" id="planItemDropdown"></div>
       <div class="plan-actions">
         <button class="connect-btn ghost" id="planAddBtn">+ เพิ่ม Item</button>
         <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ คำนวณเวลาในการผลิต</button>
@@ -1674,6 +1683,58 @@ function planItemOptions(){
   return [...new Set(RAW.filter(r=> r.item_code && r.dept).map(r=>r.item_code))].sort();
 }
 
+/** รับค่ารหัส Item ที่พิมพ์/เลือกให้กับแถวในแผน — เรียกทั้งจากปุ่มเลือกใน dropdown และตอนพิมพ์แล้วออกจากช่อง */
+function planCommitItemValue(job, raw){
+  raw = (raw || '').trim();
+  const match = planItemOptions().find(i => i.toLowerCase() === raw.toLowerCase());
+  job.item = match || raw;
+  // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับ/ขั้นตอนที่เพิ่มเองไว้ของเดิมจึงใช้ไม่ได้
+  job.steps = job.item ? buildPlanSteps(job.item, [], []) : [];
+  job.order = [];
+  job.overrides = {};
+  job.manualSteps = [];
+}
+
+// ---------- dropdown ค้นหารหัส Item ของแต่ละแถวในแผน (แทน native <datalist> ซึ่ง Safari บนมือถือ
+// ไม่แสดงเป็นลิสต์จริง แต่โชว์แค่แถบ QuickType สั้นๆ เหนือคีย์บอร์ด) ----------
+function planItemDropdownEl(){ return document.getElementById('planItemDropdown'); }
+
+function planPositionItemDropdown(input){
+  const panel = planItemDropdownEl();
+  const r = input.getBoundingClientRect();
+  panel.style.left = r.left + 'px';
+  panel.style.top = (r.bottom + 4) + 'px';
+  panel.style.width = r.width + 'px';
+}
+
+function planRenderItemDropdown(input){
+  const panel = planItemDropdownEl();
+  if(!panel) return;
+  const query = input.value.trim().toLowerCase();
+  const allOptions = planItemOptions();
+  const matches = query ? allOptions.filter(o=>o.toLowerCase().includes(query)) : allOptions;
+  const shown = matches.slice(0, 80);
+
+  if(shown.length === 0){
+    panel.innerHTML = `<div class="ss-panel-empty">ไม่พบรหัส Item ที่ตรงกัน</div>`;
+  }else{
+    let html = '';
+    if(matches.length > shown.length){
+      html += `<div class="ss-panel-meta">พบ ${matches.length.toLocaleString()} รายการ — แสดง ${shown.length} รายการแรก พิมพ์เพื่อค้นหาแคบลง</div>`;
+    }
+    html += shown.map(opt=>`<div class="ss-option" data-value="${escapeHtml(opt).replace(/"/g,'&quot;')}">${highlightMatch(opt, query)}</div>`).join('');
+    panel.innerHTML = html;
+  }
+  panel.dataset.forJob = input.getAttribute('data-job');
+  planPositionItemDropdown(input);
+  panel.classList.add('open');
+}
+
+function planCloseItemDropdown(){
+  const panel = planItemDropdownEl();
+  if(panel) panel.classList.remove('open');
+}
+
 /** โครงขั้นตอนเปล่าสำหรับ Item ใหม่ที่ยังไม่มีข้อมูลย้อนหลัง — ผู้ใช้กรอกอัตราเอง */
 function planManualStepShell(dept){
   const rank = standardStepRank(dept);
@@ -1814,7 +1875,7 @@ function renderPlanRows(){
     const bad = job.item && !options.includes(job.item);
     return `<div class="plan-row">
       <div class="plan-row-no">#${i+1}</div>
-      <input class="search-box plan-row-item${bad ? ' invalid' : ''}" list="planItemList" data-job="${job.uid}" data-rowfield="item"
+      <input class="search-box plan-row-item${bad ? ' invalid' : ''}" data-job="${job.uid}" data-rowfield="item"
              value="${escapeHtml(job.item).replace(/"/g,'&quot;')}" placeholder="ค้นหา / เลือกรหัส Item..." autocomplete="off">
       <input class="search-box plan-num" type="number" min="1" step="1" data-job="${job.uid}" data-rowfield="qty" value="${job.qty}">
       <div class="plan-row-tools">
@@ -2596,13 +2657,10 @@ function renderPlanner(){
 
 /** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
 function refreshPlanner(){
-  const options = planItemOptions();
   planState.jobs.forEach(j=>{
     j.steps = j.item ? buildPlanSteps(j.item, j.order, j.manualSteps) : [];
   });
   if(planState.computed && !planValidJobs().length) planState.computed = false;
-  const itemList = document.getElementById('planItemList');
-  if(itemList) itemList.innerHTML = options.map(i=>`<option value="${escapeHtml(i).replace(/"/g,'&quot;')}"></option>`).join('');
   const custList = document.getElementById('planCustomerList');
   if(custList) custList.innerHTML = allCustomers.filter(Boolean).map(c=>`<option value="${escapeHtml(c).replace(/"/g,'&quot;')}"></option>`).join('');
   renderPlanRows();
@@ -2695,22 +2753,48 @@ function refreshPlanner(){
     const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
     if(!job) return;
     if(inp.getAttribute('data-rowfield') === 'item'){
-      const raw = (inp.value || '').trim();
-      const match = planItemOptions().find(i => i.toLowerCase() === raw.toLowerCase());
-      job.item = match || raw;
-      // เปลี่ยน Item = ขั้นตอนคนละชุด ค่าที่พิมพ์ทับ/ขั้นตอนที่เพิ่มเองไว้ของเดิมจึงใช้ไม่ได้
-      job.steps = job.item ? buildPlanSteps(job.item, [], []) : [];
-      job.order = [];
-      job.overrides = {};
-      job.manualSteps = [];
+      planCommitItemValue(job, inp.value);
     }else{
       const v = parseFloat(inp.value);
       job.qty = (isNaN(v) || v <= 0) ? 1 : v;
     }
+    planCloseItemDropdown();
     if(planState.computed) planState.dirty = true;
     renderPlanRows();
     renderPlanner();
   });
+
+  // dropdown ค้นหารหัส Item ของแต่ละแถว — เปิดตอนโฟกัส/พิมพ์ กรองผลตามคำค้น แล้วเลือกด้วยการแตะ
+  rowBox.addEventListener('input', (e)=>{
+    const inp = e.target.closest('.plan-row-item');
+    if(!inp) return;
+    planRenderItemDropdown(inp);
+  });
+  rowBox.addEventListener('focusin', (e)=>{
+    const inp = e.target.closest('.plan-row-item');
+    if(!inp) return;
+    planRenderItemDropdown(inp);
+  });
+  const itemDropdown = document.getElementById('planItemDropdown');
+  itemDropdown.addEventListener('mousedown', (e)=>{
+    const opt = e.target.closest('.ss-option');
+    if(!opt) return;
+    e.preventDefault(); // กันไม่ให้ช่องกรอกเสียโฟกัสก่อนอ่านค่าที่แตะ
+    const job = planFindJob(parseInt(itemDropdown.dataset.forJob, 10));
+    if(!job) return;
+    planCommitItemValue(job, opt.getAttribute('data-value'));
+    planCloseItemDropdown();
+    if(planState.computed) planState.dirty = true;
+    renderPlanRows();
+    renderPlanner();
+  });
+  document.addEventListener('click', (e)=>{
+    if(!itemDropdown.classList.contains('open')) return;
+    if(itemDropdown.contains(e.target) || e.target.closest('.plan-row-item')) return;
+    planCloseItemDropdown();
+  });
+  window.addEventListener('scroll', ()=> planCloseItemDropdown(), true);
+  window.addEventListener('resize', planCloseItemDropdown);
 
   // ปุ่มและช่องกรอกในตารางถูกวาดใหม่ทุกครั้ง จึงผูก event แบบ delegate ที่กล่องผลลัพธ์
   const box = document.getElementById('planResult');
