@@ -2598,12 +2598,18 @@ function computePlan(){
       if(r.end_dt && (!jobEndDt || r.end_dt > jobEndDt)) jobEndDt = r.end_dt;
     });
     if(!jobRealStartDt) jobRealStartDt = new Date((anchorDt || startDt).getTime());
-    // ขั้นตอนแยกทำเมื่อไรก็ได้ ไม่ผูกวันที่จริงให้ (ตารางแสดง "—") แต่ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
+    // ขั้นตอนแยกไม่ได้ต่อจากขั้นตอนใด ระบบจึงไม่เดาวันที่ให้ (ตารางแสดง "—") ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
+    // แต่ถ้าผู้ใช้กรอกเวลาเริ่มของขั้นตอนนั้นเองไว้ ถือว่ารู้แล้วว่าจะทำวันไหน — ผูกวันที่ตามที่กรอก แล้วคิดเวลาจบต่อจากนั้น
     extra.forEach(r=>{
-      r.start_dt = null;
-      r.end_dt = null;
-      r.tl_start = jobRealStartDt;
-      r.tl_end = r.hours != null ? planAdvanceHours(jobRealStartDt, r.hours, hpd, shiftMin) : null;
+      const ov = job.overrides[r.step.key];
+      const manualDt = (ov && ov.startAt) ? new Date(ov.startAt) : null;
+      const pinned = (manualDt && !isNaN(manualDt.getTime())) ? planClampToShift(manualDt, hpd, shiftMin) : null;
+      r.start_override = !!pinned;
+      r.start_dt = pinned;
+      r.end_dt = (pinned && r.hours != null) ? planAdvanceHours(pinned, r.hours, hpd, shiftMin) : null;
+      const tlFrom = pinned || jobRealStartDt;
+      r.tl_start = tlFrom;
+      r.tl_end = r.hours != null ? planAdvanceHours(tlFrom, r.hours, hpd, shiftMin) : null;
     });
 
     const sum = (rows, key)=> rows.reduce((s,r)=> s + (r[key]||0), 0);
@@ -3407,6 +3413,14 @@ function renderPlanner(){
       else if(r.prev_dept) flowNote = 'เริ่มพร้อม ' + r.prev_dept;
       if(r.starved) flowNote += (flowNote ? ' · ' : '') + 'รอของระหว่างทำ';
     }
+    // ขั้นตอนแยกไม่มีวันที่คำนวณให้ ช่องแก้เวลาเริ่มจึงเป็นทางเดียวที่จะระบุวันที่ของมัน
+    const isExtra = kind === 'extra';
+    const startEditTip = isExtra
+      ? 'ขั้นตอนแยกไม่ได้ต่อจากขั้นตอนใด ระบบจึงไม่คำนวณวันที่ให้ — กรอกเวลาเริ่มเองได้ถ้ารู้ว่าจะทำวันไหน แล้วเวลาจบจะคิดต่อจากนั้นให้'
+      : 'แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง';
+    const clearStartTip = isExtra
+      ? 'ล้างเวลาที่กรอกเอง กลับไปไม่ผูกวันที่'
+      : 'ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ';
     const seq = no
       ? `<span class="plan-seq-no">${no}</span>
           <button class="plan-move" data-move="up" data-movekind="${kind}" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนขึ้น" ${no===1?'disabled':''}>▲</button>
@@ -3436,10 +3450,12 @@ function renderPlanner(){
       <td class="mono plan-daterange">
         <div>${r.start_dt ? planFmtDateTime(r.start_dt) + ' → ' + planFmtDateTime(r.end_dt) : '—'}</div>
         ${flowNote ? `<div class="plan-src">${escapeHtml(flowNote)}</div>` : ''}
-        ${r.start_dt ? `<div class="plan-start-edit">
-          <input class="plan-cell-input plan-start-input" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-key="${stepKey}" value="${planFmtDateTimeLocal(r.start_dt)}" title="แก้เวลาเริ่มขั้นตอนนี้ให้สอดคล้องกับความเป็นจริง">
-          ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${stepKey}" data-job="${job.uid}" title="ล้างเวลาที่แก้เอง กลับไปคำนวณอัตโนมัติ">✕</button>` : ''}
-        </div>${r.start_override ? '<div class="plan-src manual">แก้เอง</div>' : ''}` : ''}
+        <div class="plan-start-edit">
+          <input class="plan-cell-input plan-start-input${r.start_override ? ' manual' : ''}" type="datetime-local" data-field="startAt" data-job="${job.uid}" data-key="${stepKey}" value="${planFmtDateTimeLocal(r.start_dt)}" title="${startEditTip}">
+          ${r.start_override ? `<button class="plan-move plan-del" data-clearstart="${stepKey}" data-job="${job.uid}" title="${clearStartTip}">✕</button>` : ''}
+        </div>
+        ${r.start_override ? '<div class="plan-src manual">แก้เอง</div>'
+          : (isExtra ? '<div class="plan-src">กรอกเวลาเริ่มเองได้</div>' : '')}
       </td>
       <td class="num mono">${fmtNum(r.step.n)}<div class="plan-src ${r.step.rank_src === 'standard' ? '' : 'guess'}">${PLAN_RANK_LABEL[r.step.rank_src] || ''}</div></td>
     </tr>`;
@@ -3473,7 +3489,7 @@ function renderPlanner(){
     const job = jp.job;
     const mainBody = jp.main.map((r,k)=> rowHtml(r, job, k+1, jp.main.length, 'main')).join('');
     const extraBody = jp.extra.length
-      ? `<tr class="plan-sep"><td colspan="11">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก จึงไม่ผูกวันที่และไม่นับรวมในวันที่เสร็จ (เลื่อนขึ้น/ลงได้เพื่อจัดลำดับที่แสดง)</td></tr>` + jp.extra.map((r,k)=> rowHtml(r, job, k+1, jp.extra.length, 'extra')).join('')
+      ? `<tr class="plan-sep"><td colspan="11">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก ระบบจึงไม่คำนวณวันที่ให้และไม่นับรวมในวันที่เสร็จ · กรอกเวลาเริ่มเองในช่อง “ช่วงวันที่” ได้ถ้ารู้ว่าจะทำวันไหน (เลื่อนขึ้น/ลงได้เพื่อจัดลำดับที่แสดง)</td></tr>` + jp.extra.map((r,k)=> rowHtml(r, job, k+1, jp.extra.length, 'extra')).join('')
       : '';
     const totalRows = (jp.extra.length ? `
             <tr class="plan-tot">
