@@ -652,12 +652,39 @@
   .plan-timeline{display:flex;flex-direction:column;gap:8px;}
   .plan-tl-row{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;}
   .plan-tl-name{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .plan-tl-track{position:relative;height:22px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:5px;}
-  .plan-tl-bar{
-    position:absolute;top:0;bottom:0;border-radius:4px;min-width:3px;display:flex;align-items:center;
-    padding:0 6px;font-family:var(--mono);font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;
+  .plan-tl-track{
+    position:relative;height:22px;border:1px solid var(--border-soft);border-radius:5px;
+    background-color:var(--surface-2);
+    /* เส้นแบ่งวัน — คาบเท่ากันทุกช่วง เพราะแกนนับเฉพาะชั่วโมงทำงาน */
+    background-image:repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px var(--tl-grid, 100%));
   }
+  .plan-tl-bar{position:absolute;top:0;bottom:0;border-radius:4px;min-width:2px;}
+  /* ทำๆ หยุดๆ เพราะรอของจากหน่วยก่อนหน้า — ลายทางบอกว่าไม่ได้เดินเครื่องต่อเนื่องตลอดช่วงที่คร่อมอยู่ */
+  .plan-tl-bar.intermittent{background-image:repeating-linear-gradient(135deg, rgba(0,0,0,0) 0 5px, rgba(0,0,0,.34) 5px 10px);}
   .plan-tl-bar.standalone{opacity:.55;}
+  /* ป้ายอยู่นอกแท่ง จึงอ่านออกแม้แท่งจะสั้นมาก (เดิมป้ายถูกตัดจนเหลือตัวเดียวในแท่งแคบๆ) */
+  .plan-tl-label{
+    position:absolute;top:0;bottom:0;display:flex;align-items:center;
+    font-family:var(--mono);font-size:10.5px;font-weight:600;white-space:nowrap;pointer-events:none;
+  }
+  .plan-tl-label.after{padding-left:6px;}
+  .plan-tl-label.before{transform:translateX(-100%);padding-right:6px;}
+  /* แท่งยาวเกือบเต็มแกนจนไม่มีที่ว่างทั้งสองข้าง — วางป้ายไว้ในแท่งแทน */
+  .plan-tl-label.inside{padding-left:7px;}
+  .plan-tl-label.standalone{opacity:.65;}
+  .plan-tl-axis{align-items:end;}
+  .plan-tl-axis .plan-tl-name{font-size:11px;color:var(--text-faint);}
+  .plan-tl-scale{position:relative;height:16px;overflow:hidden;}
+  .plan-tl-day{
+    position:absolute;top:0;bottom:0;border-left:1px solid var(--border);
+    padding-left:4px;font-family:var(--mono);font-size:10px;color:var(--text-faint);
+    white-space:nowrap;overflow:hidden;
+  }
+  .plan-tl-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:11px;color:var(--text-dim);}
+  .plan-tl-legend span{display:inline-flex;align-items:center;gap:6px;}
+  .plan-tl-legend i{width:22px;height:10px;border-radius:3px;background-color:rgba(148,163,184,.55);flex-shrink:0;}
+  .plan-tl-legend i.intermittent{background-image:repeating-linear-gradient(135deg, rgba(0,0,0,0) 0 5px, rgba(0,0,0,.34) 5px 10px);}
+  .plan-tl-legend i.standalone{opacity:.55;}
   .plan-tl-job{font-family:var(--mono);font-size:11.5px;color:var(--accent);margin:10px 0 0;}
   .plan-tl-sep{
     font-size:11px;color:var(--text-faint);margin:6px 0 2px;padding-top:8px;
@@ -695,6 +722,9 @@
     .plan-row-tools{grid-area:tools;}
     .plan-row-hint{grid-column:1 / -1;}
     .search-box{min-width:0;}
+    /* ชื่อหน่วยงาน 180px กินพื้นที่เกือบหมดจอมือถือ จนแท่งไทม์ไลน์แทบไม่เหลือที่ */
+    .plan-tl-row{grid-template-columns:88px 1fr;gap:6px;}
+    .plan-tl-legend{gap:8px;flex-direction:column;}
   }
 </style>
 </head>
@@ -2464,7 +2494,7 @@ function computePlan(){
   balance.forEach(b=> b.isBottleneck = slowestPerSlot > 0 && b.perSlot >= slowestPerSlot - 1e-9);
 
   return {
-    jobs: jobResults, startIso, hpd, overlap, wipHours,
+    jobs: jobResults, startIso, hpd, shiftMin, overlap, wipHours,
     spanHours, spanDays: spanHours/hpd,
     balance, totalSlots, balanceTarget,
     hasExtra: jobResults.some(j=> j.extra.length > 0),
@@ -3093,27 +3123,73 @@ function renderPlanner(){
 
   const jobsHtml = plan.jobs.map(jobHtml).join('');
 
-  // ตำแหน่ง/ความยาวแท่งอิงจากเวลาเริ่ม-จบจริงของแต่ละขั้นตอน (รวมเวลาที่แก้เอง) จึงขยับตามทันทีที่แก้เวลาในตาราง
-  let tlMinMs = null, tlMaxMs = null;
+  // ---------- ไทม์ไลน์ ----------
+  // แกนนอนเป็น "ชั่วโมงทำงาน" ไม่ใช่เวลาปฏิทิน — กลางคืนกับวันอาทิตย์ถูกตัดออกจากแกน
+  // ถ้าวัดด้วยเวลาปฏิทิน ขั้นตอนที่ข้ามคืนจะพองขึ้นเกือบ 3 เท่าเทียบกับขั้นตอนที่จบภายในวันเดียว ทั้งที่งานจริงเท่ากัน
+  // ตำแหน่ง/ความยาวแท่งยังอิงเวลาเริ่ม-จบจริงของแต่ละขั้นตอน (รวมเวลาที่แก้เอง) จึงขยับตามทันทีที่แก้เวลาในตาราง
+  let tlMin = null, tlMax = null;
   plan.jobs.forEach(jp=>{
     jp.main.concat(jp.extra).forEach(r=>{
-      if(r.tl_start){ const t = r.tl_start.getTime(); if(tlMinMs == null || t < tlMinMs) tlMinMs = t; }
-      if(r.tl_end){ const t = r.tl_end.getTime(); if(tlMaxMs == null || t > tlMaxMs) tlMaxMs = t; }
+      if(r.tl_start && (tlMin == null || r.tl_start < tlMin)) tlMin = r.tl_start;
+      if(r.tl_end && (tlMax == null || r.tl_end > tlMax)) tlMax = r.tl_end;
     });
   });
-  const tlSpanMs = (tlMinMs != null && tlMaxMs != null) ? Math.max(tlMaxMs - tlMinMs, 3600000) : 1;
+  const tlWorkAt = (dt)=> tlMin ? planWorkingHoursBetween(tlMin, dt, plan.hpd, plan.shiftMin) : 0;
+  const tlSpanHours = (tlMin && tlMax) ? Math.max(tlWorkAt(tlMax), plan.hpd/4) : 1;
+
+  // ช่องวันบนแกน — กว้างเท่ากันทุกวัน (วันละ hpd ชม.) ยกเว้นวันสุดท้ายที่อาจไม่เต็มวัน
+  const tlDays = [];
+  if(tlMin && tlMax){
+    let d = planClampToShift(tlMin, plan.hpd, plan.shiftMin);
+    for(let guard = 0; d < tlMax && guard < 2000; guard++){
+      const dayEnd = new Date(d.getTime());
+      dayEnd.setHours(0,0,0,0);
+      dayEnd.setMinutes(plan.shiftMin + plan.hpd*60);
+      tlDays.push(new Date(d.getTime()));
+      d = new Date(dayEnd.getTime());
+      d.setDate(d.getDate()+1);
+      while(d.getDay() === 0) d.setDate(d.getDate()+1);
+      d.setHours(0,0,0,0); d.setMinutes(plan.shiftMin);
+    }
+  }
+  // แผนที่ยาวหลายสิบวัน ถ้าขีดเส้นทุกวันจะถี่จนอ่านไม่ออก — ยุบให้เส้นห่างกันพออ่านออก
+  const tlDayPct = (plan.hpd/tlSpanHours)*100;
+  const tlDayStep = Math.max(1, Math.ceil(4/Math.max(tlDayPct, 0.01)));
+  const tlGridPct = tlDayPct*tlDayStep;
+
+  const tlAxisHtml = tlDays.length ? `<div class="plan-tl-row plan-tl-axis">
+      <div class="plan-tl-name">วันที่ (นับเฉพาะเวลาทำงาน)</div>
+      <div class="plan-tl-scale">${tlDays.map((from,i)=> i % tlDayStep !== 0 ? '' :
+        `<div class="plan-tl-day" style="left:${(tlWorkAt(from)/tlSpanHours)*100}%;width:${tlGridPct}%;">${from.getDate()}/${from.getMonth()+1}</div>`
+      ).join('')}</div>
+    </div>` : '';
+
   const tlRow = (r, standalone)=>{
     const c = getDeptColor(r.step.dept);
     const name = escapeHtml(r.step.dept) + (r.owner ? ` <span class="plan-src">· ${escapeHtml(r.owner)}</span>` : '');
     if(!r.tl_start || !r.tl_end) return `<div class="plan-tl-row"><div class="plan-tl-name">${name}</div><div class="plan-tl-track"></div></div>`;
-    const left = ((r.tl_start.getTime() - tlMinMs)/tlSpanMs)*100;
-    const width = Math.max(((r.tl_end.getTime() - r.tl_start.getTime())/tlSpanMs)*100, 1.2);
+    const left = (tlWorkAt(r.tl_start)/tlSpanHours)*100;
+    const spanHours = Math.max(tlWorkAt(r.tl_end) - tlWorkAt(r.tl_start), 0);
+    const width = Math.max((spanHours/tlSpanHours)*100, 0.5);
+    // ช่วงที่คร่อมอยู่ยาวกว่าเวลาเดินเครื่อง = ทำๆ หยุดๆ เพราะของจากหน่วยก่อนหน้ามาไม่ทัน
+    const idleHours = r.hours != null ? spanHours - r.hours : 0;
+    const intermittent = idleHours > 0.05;
     const material = cleanMaterialDisplay(r.step.material || '') || 'ไม่มีข้อมูลวัตถุดิบ';
-    const tip = `${r.step.dept}${r.owner ? ' (' + r.owner + ')' : ''} — ${material}\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · ${fmtNum(r.days,2)} วัน\n${planFmtDateTime(r.tl_start)} → ${planFmtDateTime(r.tl_end)}`;
+    const label = intermittent
+      ? `${fmtNum(r.days,2)} วัน · คร่อม ${fmtNum(spanHours/plan.hpd,2)}`
+      : `${fmtNum(r.days,2)} วัน`;
+    const tip = `${r.step.dept}${r.owner ? ' (' + r.owner + ')' : ''} — ${material}`
+      + `\nต้องทำ ${fmtNum(r.qty_in)} ชิ้น · เดินเครื่อง ${fmtNum(r.days,2)} วัน (${fmtHM(r.hours)} ชม.)`
+      + (intermittent ? `\nคร่อมช่วง ${fmtNum(spanHours/plan.hpd,2)} วัน — รอของระหว่างทำรวม ${fmtHM(idleHours)} ชม.` : '')
+      + `\n${planFmtDateTime(r.tl_start)} → ${planFmtDateTime(r.tl_end)}`;
+    // ป้ายวางนอกแท่ง แท่งสั้นๆ จึงยังอ่านออก (เดิมป้ายอยู่ในแท่งแล้วถูกตัดจนเหลือตัวเดียว)
+    // ท้ายแกนไม่มีที่ว่างก็พลิกไปไว้หน้าแท่ง ถ้าแท่งยาวจนไม่เหลือที่ทั้งสองข้างค่อยวางในแท่ง
+    const labelPos = (left + width <= 74) ? 'after' : (left >= 26 ? 'before' : 'inside');
     return `<div class="plan-tl-row">
       <div class="plan-tl-name">${name}</div>
-      <div class="plan-tl-track">
-        <div class="plan-tl-bar${standalone ? ' standalone' : ''}" style="left:${left}%;width:${width}%;background:${c.border};color:${c.text};" title="${escapeHtml(tip).replace(/"/g,'&quot;')}">${fmtNum(r.days,2)} วัน</div>
+      <div class="plan-tl-track" title="${escapeHtml(tip).replace(/"/g,'&quot;')}">
+        <div class="plan-tl-bar${standalone ? ' standalone' : ''}${intermittent ? ' intermittent' : ''}" style="left:${left}%;width:${width}%;background-color:${c.border};"></div>
+        <span class="plan-tl-label ${labelPos}${standalone ? ' standalone' : ''}" style="left:${labelPos === 'after' ? left + width : left}%;color:${c.text};">${label}</span>
       </div>
     </div>`;
   };
@@ -3178,12 +3254,18 @@ function renderPlanner(){
   const timelineHtml = `
     <div class="panel" style="margin-top:16px;">
       <h2>ไทม์ไลน์โดยประมาณ</h2>
-      <div class="panel-note">ตำแหน่งและความยาวแท่งอิงจากเวลาเริ่ม-จบจริงของแต่ละขั้นตอน รวมเวลาที่แก้เองในตาราง (ขยับ/มีช่องว่างตามที่แก้ทันที) ส่วนขั้นตอนแยกวาดจากจุดเริ่มของ Item นั้นแบบประมาณการเท่านั้น</div>
-      <div class="plan-timeline">
+      <div class="panel-note">แกนนอนนับเฉพาะ<b>เวลาทำงาน</b> — กลางคืนกับวันอาทิตย์ถูกตัดออก ความยาวแท่งจึงเทียบกันได้ตรงๆ (วันละ ${fmtNum(plan.hpd,0)} ชม. เริ่มกะ ${escapeHtml(planState.shiftStart)}) · ตำแหน่งและความยาวอิงเวลาเริ่ม-จบจริงของแต่ละขั้นตอน รวมเวลาที่แก้เองในตาราง (ขยับตามที่แก้ทันที) ส่วนขั้นตอนแยกวาดจากจุดเริ่มของ Item นั้นแบบประมาณการเท่านั้น</div>
+      <div class="plan-timeline" style="--tl-grid:${tlGridPct}%;">
+        ${tlAxisHtml}
         ${plan.jobs.map((jp,i)=> `<div class="plan-tl-job">#${i+1} ${escapeHtml(jp.job.item)}</div>`
             + jp.main.map(r=> tlRow(r, false)).join('')
             + (jp.extra.length ? `<div class="plan-tl-sep">ขั้นตอนแยก — ทำเมื่อไรก็ได้ ไม่ได้ต่อจากขั้นตอนใด จึงวาดจากจุดเริ่มของ Item นั้น</div>` + jp.extra.map(r=> tlRow(r, true)).join('') : '')
           ).join('')}
+      </div>
+      <div class="plan-tl-legend">
+        <span><i></i>เดินเครื่องต่อเนื่อง — ป้ายบอกจำนวนวันทำงานจริง</span>
+        <span><i class="intermittent"></i>ทำๆ หยุดๆ รอของจากหน่วยก่อนหน้า — ป้ายบอก “วันทำงานจริง · คร่อมกี่วัน”</span>
+        ${plan.hasExtra ? '<span><i class="standalone"></i>ขั้นตอนแยก (ประมาณการ ไม่ได้ผูกกับสายหลัก)</span>' : ''}
       </div>
     </div>`;
 
@@ -3222,7 +3304,35 @@ function renderPlanner(){
     </div>`;
 
   box.innerHTML = staleHtml + kpiHtml + jobsHtml + balanceHtml + timelineHtml + assumeHtml;
+  planFitTimelineLabels();
 }
+
+/** วางป้ายกำกับแท่งไทม์ไลน์ตามที่ว่างจริง — ความกว้างของแทร็กขึ้นกับขนาดจอ เดาตอนสร้าง HTML ไม่ได้
+ *  ตำแหน่งที่ใส่มากับ HTML เป็นค่าประมาณกันภาพกระพริบ ตรงนี้วัดของจริงแล้วจัดใหม่ให้ป้ายไม่ล้นขอบ */
+function planFitTimelineLabels(){
+  document.querySelectorAll('.plan-timeline .plan-tl-track').forEach(track=>{
+    const bar = track.querySelector('.plan-tl-bar');
+    const label = track.querySelector('.plan-tl-label');
+    if(!bar || !label) return;
+    const tw = track.clientWidth;
+    if(!tw) return;
+    const lw = label.scrollWidth + 2;
+    const barLeft = bar.offsetLeft;
+    const barRight = barLeft + bar.offsetWidth;
+    const pos = (barRight + lw <= tw) ? 'after' : (barLeft - lw >= 0 ? 'before' : 'inside');
+    label.classList.remove('after','before','inside');
+    label.classList.add(pos);
+    // จอแคบมากจนไม่มีที่ทั้งสองข้าง — ดึงป้ายกลับเข้ามาในแทร็กไม่ให้ล้นขอบ
+    const at = pos === 'after' ? barRight : (pos === 'before' ? barLeft : Math.max(0, Math.min(barLeft, tw - lw)));
+    label.style.left = at + 'px';
+  });
+}
+// หมุนจอ/ย่อขยายหน้าต่างแล้วแทร็กเปลี่ยนความกว้าง ป้ายจึงต้องจัดใหม่
+let planFitTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(planFitTimer);
+  planFitTimer = setTimeout(planFitTimelineLabels, 120);
+});
 
 /** เรียกเมื่อข้อมูลถูกโหลดใหม่ — Item ในแผน ลำดับ และค่าที่พิมพ์ทับยังคงอยู่ */
 function refreshPlanner(){
