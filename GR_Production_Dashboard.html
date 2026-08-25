@@ -562,11 +562,14 @@
   /* Production planner (คำนวณแผนผลิต) */
   .plan-num{min-width:130px;width:100%;text-align:right;font-family:var(--mono);}
   .plan-num::-webkit-calendar-picker-indicator{filter:invert(.7);}
-  /* ช่องกำหนดเสร็จรายไอเทม — ป้ายกำกับโผล่เฉพาะจอมือถือที่หัวตารางถูกซ่อน */
-  .plan-row-duewrap{min-width:0;}
-  .plan-row-duetag{display:none;}
-  .plan-row-due{min-width:148px;width:100%;text-align:left;font-family:var(--mono);font-size:12px;}
-  .plan-row-due::-webkit-calendar-picker-indicator{filter:invert(.7);}
+  /* ช่องวันเริ่ม/กำหนดเสร็จรายไอเทม — ป้ายกำกับโผล่เฉพาะจอมือถือที่หัวตารางถูกซ่อน */
+  .plan-row-duewrap,.plan-row-startwrap{min-width:0;}
+  .plan-row-duetag,.plan-row-starttag{display:none;}
+  .plan-row-due,.plan-row-start{min-width:136px;width:100%;text-align:left;font-family:var(--mono);font-size:12px;}
+  .plan-row-due::-webkit-calendar-picker-indicator,
+  .plan-row-start::-webkit-calendar-picker-indicator{filter:invert(.7);}
+  /* วันเริ่มที่กรอกเองมีผลกับการคำนวณจริง (ไม่เหมือนกำหนดเสร็จที่เป็นแค่เส้นเทียบ) จึงทำกรอบให้เห็นชัด */
+  .plan-row-start.pinned{border-color:var(--accent);color:var(--accent);}
   .plan-add-bar{margin-top:-10px;}
   .plan-add-btn{align-self:stretch;white-space:nowrap;}
   .kpi .value.plan-text{font-size:17px;line-height:1.4;}
@@ -618,7 +621,7 @@
   /* แถวกรอกรายการ Item */
   .plan-items-panel{margin-bottom:20px;}
   .plan-rows{display:flex;flex-direction:column;gap:8px;}
-  .plan-row{display:grid;grid-template-columns:34px 1fr 130px 158px auto;gap:10px;align-items:center;}
+  .plan-row{display:grid;grid-template-columns:34px minmax(150px,1fr) 104px 148px 148px auto;gap:10px;align-items:center;}
   .plan-row.head{padding-bottom:2px;}
   .plan-row.head span{
     font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);
@@ -721,7 +724,14 @@
   }
   .plan-due-badge.ok{border-color:var(--good);color:var(--good);background:var(--good-dim);}
   .plan-due-badge.late{border-color:var(--bad);color:var(--bad);background:var(--bad-dim);}
-  .plan-due-table{min-width:620px;}
+  /* ป้ายวันเริ่มที่กำหนดให้ Item นั้นเอง — สีเดียวกับช่องกรอกเพื่อให้โยงกันได้ */
+  .plan-start-badge{
+    display:inline-flex;align-items:center;font-family:var(--mono);font-size:10.5px;
+    border:1px solid var(--accent);border-radius:999px;padding:1px 8px;margin-left:8px;
+    color:var(--accent);background:var(--accent-dim);white-space:nowrap;
+  }
+  .plan-start-badge.late{border-color:var(--warn);color:var(--warn);background:none;}
+  .plan-due-table{min-width:760px;}
   .plan-due-none{font-size:11.5px;color:var(--text-dim);line-height:1.8;margin-top:12px;}
   .plan-tl-job{font-family:var(--mono);font-size:11.5px;color:var(--accent);margin:10px 0 0;}
   .plan-tl-sep{
@@ -796,6 +806,7 @@
       grid-template-areas:
         "no item item"
         "no qty tools"
+        "no start start"
         "no due due";
       gap:6px 8px;
       align-items:center;
@@ -805,8 +816,9 @@
     .plan-row-item{grid-area:item;min-width:0;width:100%;}
     .plan-num{grid-area:qty;min-width:0;width:100%;}
     .plan-row-duewrap{grid-area:due;display:flex;align-items:center;gap:8px;min-width:0;}
-    .plan-row-duetag{display:inline;font-size:11px;color:var(--text-faint);white-space:nowrap;}
-    .plan-row-due{min-width:0;width:100%;}
+    .plan-row-startwrap{grid-area:start;display:flex;align-items:center;gap:8px;min-width:0;}
+    .plan-row-duetag,.plan-row-starttag{display:inline;font-size:11px;color:var(--text-faint);white-space:nowrap;}
+    .plan-row-due,.plan-row-start{min-width:0;width:100%;}
     .plan-row-tools{grid-area:tools;}
     .plan-row-hint{grid-column:1 / -1;}
     .search-box{min-width:0;}
@@ -973,7 +985,7 @@
 
     <div class="panel plan-items-panel">
       <h2>รายการ Item ที่ต้องผลิต</h2>
-      <div class="panel-note">กรอกรหัส Item และจำนวน — กด “+ เพิ่ม Item” เพื่อเพิ่มอีกกล่อง จัดลำดับการขึ้นงานด้วยปุ่ม ▲▼ แล้วกด “คำนวณเวลาในการผลิต” · ช่อง <b>กำหนดเสร็จ</b> ใส่เฉพาะ Item ที่มีกำหนดส่งไม่ตรงกับทั้งใบสั่งผลิต ปล่อยว่างไว้จะใช้กำหนดเสร็จของทั้งใบ</div>
+      <div class="panel-note">กรอกรหัส Item และจำนวน — กด “+ เพิ่ม Item” เพื่อเพิ่มอีกกล่อง จัดลำดับการขึ้นงานด้วยปุ่ม ▲▼ แล้วกด “คำนวณเวลาในการผลิต” · ช่อง <b>วันเริ่ม</b> ใส่เมื่อ Item นั้นต้องเริ่มวันที่กำหนดไว้เอง <b>โดยไม่อ้างอิงลำดับ/วันเสร็จของ Item ก่อนหน้า</b> ปล่อยว่างไว้จะไล่ตามลำดับในแผนเหมือนเดิม · ช่อง <b>กำหนดเสร็จ</b> ใส่เฉพาะ Item ที่มีกำหนดส่งไม่ตรงกับทั้งใบสั่งผลิต ปล่อยว่างไว้จะใช้กำหนดเสร็จของทั้งใบ</div>
       <div class="plan-rows" id="planItemRows"></div>
       <div class="plan-item-dropdown" id="planItemDropdown"></div>
       <div class="plan-actions">
@@ -1903,6 +1915,17 @@ function planDueDateTime(iso, hpd, shiftMin){
   d.setMinutes(shiftMin + hpd*60);
   return d;
 }
+/** วันเริ่มที่กำหนดให้ Item หนึ่งโดยเฉพาะ = เริ่มที่ "เวลาเริ่มกะ" ของวันนั้น
+ *  ถ้ากรอกตรงวันอาทิตย์ (โรงงานหยุด) เลื่อนไปเป็นต้นกะของวันทำงานถัดไป
+ *  ว่าง = ไม่ได้กำหนด ให้ Item นั้นไล่ตามลำดับในแผนเหมือนเดิม */
+function planJobStartDateTime(iso, hpd, shiftMin){
+  if(!iso) return null;
+  const p = String(iso).split('-').map(Number);
+  if(p.length !== 3 || p.some(x=> isNaN(x))) return null;
+  const d = new Date(p[0], p[1]-1, p[2], Math.floor(shiftMin/60), shiftMin%60);
+  if(isNaN(d.getTime())) return null;
+  return planClampToShift(d, hpd, shiftMin);
+}
 /** เทียบเวลาที่คาดว่าเสร็จกับกำหนดเสร็จ — วัดส่วนต่างเป็น "ชั่วโมงทำงาน" แบบเดียวกับแกนไทม์ไลน์
  *  late = เกินกำหนด · hours/days เป็นบวกเสมอ (ห่างจากเส้นตายเท่าไร) ดูทิศจาก late */
 function planDueStatus(endDt, dueDt, hpd, shiftMin){
@@ -2209,7 +2232,7 @@ function buildPlanSteps(item, userOrder, manualDepts){
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
 
 function planNewJob(){
-  return {uid: ++planJobUid, item:'', qty: 1000, dueIso:'', steps: [], order: [], overrides: {}, manualSteps: [], manualDeptDraft: ''};
+  return {uid: ++planJobUid, item:'', qty: 1000, startIso:'', dueIso:'', steps: [], order: [], overrides: {}, manualSteps: [], manualDeptDraft: ''};
 }
 /** เฉพาะแถวที่กรอกรหัส Item ไว้ — รวมถึง Item ใหม่ที่ยังไม่มีขั้นตอนจากประวัติ
  *  แต่มีขั้นตอนที่เพิ่มเองรออยู่ (หรือรอเพิ่ม) ก็ยังนับเป็นรายการในแผน */
@@ -2240,7 +2263,7 @@ function renderPlanRows(){
   if(!box) return;
   if(!planState.jobs.length) planState.jobs.push(planNewJob());
   const options = planItemOptions();
-  box.innerHTML = `<div class="plan-row head"><span></span><span>รหัส Item</span><span>จำนวน (ชิ้น)</span><span>กำหนดเสร็จ</span><span></span></div>`
+  box.innerHTML = `<div class="plan-row head"><span></span><span>รหัส Item</span><span>จำนวน (ชิ้น)</span><span>วันเริ่ม</span><span>กำหนดเสร็จ</span><span></span></div>`
     + planState.jobs.map((job,i)=>{
     const bad = job.item && !options.includes(job.item);
     return `<div class="plan-row">
@@ -2248,6 +2271,10 @@ function renderPlanRows(){
       <input class="search-box plan-row-item${bad ? ' invalid' : ''}" data-job="${job.uid}" data-rowfield="item"
              value="${escapeHtml(job.item).replace(/"/g,'&quot;')}" placeholder="ค้นหา / เลือกรหัส Item..." autocomplete="off">
       <input class="search-box plan-num" type="number" min="1" step="1" data-job="${job.uid}" data-rowfield="qty" value="${job.qty}">
+      <label class="plan-row-startwrap" title="วันเริ่มของ Item นี้เอง — กรอกไว้แล้ว Item นี้จะเริ่มวันนั้น ไม่ต้องรอ Item ก่อนหน้าในลำดับ ปล่อยว่างไว้จะไล่ตามลำดับในแผนตามปกติ">
+        <span class="plan-row-starttag">วันเริ่ม</span>
+        <input class="search-box plan-row-start${job.startIso ? ' pinned' : ''}" type="date" data-job="${job.uid}" data-rowfield="start" value="${escapeHtml(job.startIso || '')}">
+      </label>
       <label class="plan-row-duewrap" title="กำหนดเสร็จของ Item นี้ — ปล่อยว่างไว้จะใช้กำหนดเสร็จของทั้งใบสั่งผลิต">
         <span class="plan-row-duetag">กำหนดเสร็จ</span>
         <input class="search-box plan-row-due" type="date" data-job="${job.uid}" data-rowfield="due" value="${escapeHtml(job.dueIso || '')}">
@@ -2328,7 +2355,12 @@ function computePlan(){
   const seedP = startIso.split('-').map(Number);
   const seedDt = new Date(seedP[0], seedP[1]-1, seedP[2], Math.floor(shiftMin/60), shiftMin%60);
   let cursor = planClampToShift(seedDt, hpd, shiftMin);   // ใช้เดินเวลาต่อกันในโหมดทำจบทีละขั้นเท่านั้น
-  const startDt = new Date(cursor.getTime());
+  // Item ที่กรอก "วันเริ่ม" ของตัวเองไว้ ไม่ได้ต่อคิวจาก Item ก่อนหน้าในลำดับ ถ้าใบไหนเริ่มก่อนวันเริ่มของทั้งใบ
+  // จุดตั้งต้นของแผน (และคิวเริ่มต้นของทุกช่องงาน) ต้องถอยไปถึงวันนั้นด้วย ไม่งั้นงานจะถูกดันกลับมาที่วันเริ่มของใบ
+  const startDt = planValidJobs()
+    .map(j=> planJobStartDateTime(j.startIso, hpd, shiftMin))
+    .filter(Boolean)
+    .reduce((mn, d)=> d < mn ? new Date(d.getTime()) : mn, new Date(cursor.getTime()));
 
   const overlap = planState.flowMode !== 'serial';
   const wipHours = planState.wipHours >= 0 ? planState.wipHours : 1;
@@ -2386,7 +2418,7 @@ function computePlan(){
     main.forEach(fillRow);
     extra.forEach(fillRow);
 
-    return {job, main, extra, qty, mainStartQty};
+    return {job, main, extra, qty, mainStartQty, anchorDt: planJobStartDateTime(job.startIso, hpd, shiftMin)};
   });
 
   // ---------- ผ่านที่ 2: จัดเวลา ----------
@@ -2415,8 +2447,8 @@ function computePlan(){
   }
 
   // เวลาที่ของจากหน่วยก่อนหน้า "ถึงเกณฑ์" — ไม่ต้องรอทั้งล็อต และถ้ามีหลายชิ้นส่วนป้อนเข้ามาก็รอชิ้นที่ช้าสุด
-  function feedInfo(r, prevRows){
-    let ready = new Date(startDt.getTime());
+  function feedInfo(r, prevRows, floorDt){
+    let ready = new Date((floorDt || startDt).getTime());
     let prevEnd = null, waitQty = null;
     const thisRate = (r.rate > 0) ? r.rate * r.stations : 0;
     prevRows.forEach(prev=>{
@@ -2508,7 +2540,7 @@ function computePlan(){
         }
         const prevRows = prevDept == null ? []
           : jp.main.filter((p, j)=> j < idx && p.step.dept === prevDept && planMaterialFamily(p.step.material) === fam);
-        tasks.push({job: jp.job, r, prevRows, done:false});
+        tasks.push({job: jp.job, r, prevRows, anchorDt: jp.anchorDt, done:false});
       });
     });
     const taskOfRow = new Map(tasks.map(t=> [t.r, t]));
@@ -2519,12 +2551,12 @@ function computePlan(){
       for(const t of tasks){
         if(t.done) continue;
         if(t.prevRows.some(p=>{ const pt = taskOfRow.get(p); return pt && !pt.done; })) continue;   // ยังรอขั้นก่อนหน้า
-        const info = feedInfo(t.r, t.prevRows);
+        const info = feedInfo(t.r, t.prevRows, t.anchorDt);
         if(!best || info.ready < bestInfo.ready){ best = t; bestInfo = info; }
       }
       if(!best){   // อ้างวนกันเอง (ไม่ควรเกิด) — ปล่อยตามลำดับตารางเพื่อไม่ให้ค้าง
         best = tasks.find(t=> !t.done);
-        bestInfo = feedInfo(best.r, best.prevRows.filter(p=> taskOfRow.get(p).done));
+        bestInfo = feedInfo(best.r, best.prevRows.filter(p=> taskOfRow.get(p).done), best.anchorDt);
       }
       placeRow(best.job, best.r, bestInfo);
       best.done = true;
@@ -2533,7 +2565,12 @@ function computePlan(){
   }
 
   function scheduleSerial(){
+    // ปลายคิวของไลน์ = เวลาที่ Item ก่อนหน้าทำเสร็จ — ใบที่ไม่ได้กำหนดวันเริ่มเองยังต่อคิวกันทีละใบตามโหมดนี้
+    // ส่วนใบที่กำหนดวันเริ่มเองแทรกไปทำวันนั้นเลย จะทับช่วงของใบอื่นหรือไม่ก็ตาม (ผู้ใช้ยืนยันวันมาเอง)
+    let tail = new Date(cursor.getTime());
     jobs.forEach(jp=>{
+      // Item ที่กรอกวันเริ่มของตัวเองไว้ เริ่มที่วันนั้นเลย — ไม่ต่อคิวจาก Item ก่อนหน้าในลำดับ
+      cursor = jp.anchorDt ? new Date(jp.anchorDt.getTime()) : new Date(tail.getTime());
       jp.main.forEach(r=>{
         // ผู้ใช้แก้เวลาเริ่มของขั้นตอนนี้เอง (ให้สอดคล้องกับความเป็นจริง) — ขั้นตอนถัดไปคำนวณต่อจากเวลานี้
         const ov = jp.job.overrides[r.step.key];
@@ -2549,14 +2586,16 @@ function computePlan(){
         r.tl_start = r.start_dt;
         r.tl_end = r.end_dt;
       });
+      if(cursor > tail) tail = new Date(cursor.getTime());
     });
+    cursor = tail;
   }
 
   if(overlap) scheduleOverlap(); else scheduleSerial();
 
   // ---------- ผ่านที่ 3: สรุปผลของแต่ละ Item ----------
   const jobResults = jobs.map(jp=>{
-    const {job, main, extra, qty, mainStartQty} = jp;
+    const {job, main, extra, qty, mainStartQty, anchorDt} = jp;
     // Item ที่ไม่ได้กรอกกำหนดเสร็จของตัวเอง ใช้กำหนดเสร็จของทั้งใบสั่งผลิตแทน
     const jobDueIso = (job.dueIso || '') || planDueIso;
     const jobDueDt = planDueDateTime(jobDueIso, hpd, shiftMin);
@@ -2567,7 +2606,7 @@ function computePlan(){
       if(r.start_dt && (!jobRealStartDt || r.start_dt < jobRealStartDt)) jobRealStartDt = r.start_dt;
       if(r.end_dt && (!jobEndDt || r.end_dt > jobEndDt)) jobEndDt = r.end_dt;
     });
-    if(!jobRealStartDt) jobRealStartDt = new Date(startDt.getTime());
+    if(!jobRealStartDt) jobRealStartDt = new Date((anchorDt || startDt).getTime());
     // ขั้นตอนแยกทำเมื่อไรก็ได้ ไม่ผูกวันที่จริงให้ (ตารางแสดง "—") แต่ไทม์ไลน์วาดโดยประมาณจากจุดเริ่มของ Item นั้น
     extra.forEach(r=>{
       r.start_dt = null;
@@ -2587,6 +2626,13 @@ function computePlan(){
       totalDays: (mainHours + extraHours)/hpd,
       start_dt: main.length ? jobRealStartDt : null,
       end_dt: main.length ? jobEndDt : null,
+      // วันเริ่มที่กำหนดให้ Item นี้เอง — เก็บไว้ทั้งวันที่กรอกและส่วนต่างจากเวลาที่เริ่มได้จริง
+      // (กำหนดวันเริ่มไว้แล้วยังอาจเริ่มช้ากว่านั้นได้ ถ้าคนของหน่วยแรกยังติดงานอื่นอยู่)
+      startPinned: !!anchorDt,
+      startIso: job.startIso || '',
+      startAnchorDt: anchorDt,
+      startDelayHours: (anchorDt && main.length && jobRealStartDt > anchorDt)
+        ? planWorkingHoursBetween(anchorDt, jobRealStartDt, hpd, shiftMin) : 0,
       // กำหนดเสร็จของ Item นี้ + สถานะเทียบกับเวลาที่คาดว่าจะเสร็จ (นับเฉพาะสายหลัก เหมือนวันที่เสร็จที่แสดงในตาราง)
       dueIso: jobDueIso,
       dueDt: jobDueDt,
@@ -2604,9 +2650,12 @@ function computePlan(){
   });
 
   // โหมดส่งต่อระหว่างทำ: ทั้งแผนเสร็จเมื่อ Item ที่เสร็จช้าสุดเสร็จ (งานหลาย Item เดินทับซ้อนกันได้)
+  // โหมดทำจบทีละขั้นปกติจบที่ปลายคิว แต่ถ้ามี Item ที่กำหนดวันเริ่มเองไว้ก่อนหน้า คิวอาจถูกดึงย้อนกลับไป
+  // จึงต้องเทียบกับใบที่เสร็จช้าที่สุดด้วยเสมอ
+  const lastJobEnd = jobResults.reduce((mx, j)=> (j.end_dt && (!mx || j.end_dt > mx)) ? j.end_dt : mx, null);
   const finishDt = overlap
-    ? (jobResults.reduce((mx, j)=> (j.end_dt && (!mx || j.end_dt > mx)) ? j.end_dt : mx, null) || new Date(startDt.getTime()))
-    : new Date(cursor.getTime());
+    ? (lastJobEnd || new Date(startDt.getTime()))
+    : ((lastJobEnd && lastJobEnd > cursor) ? new Date(lastJobEnd.getTime()) : new Date(cursor.getTime()));
   const spanHours = planWorkingHoursBetween(startDt, finishDt, hpd, shiftMin);
 
   // กำหนดเสร็จของทั้งใบสั่งผลิต — เทียบกับวันที่ทั้งแผนเสร็จ (Item ที่เสร็จช้าสุด)
@@ -2703,6 +2752,9 @@ function computePlan(){
     finishDt,
     dueIso: planDueIso, dueDt, dueStatus, lateJobs,
     anyDue: !!dueDt || jobResults.some(j=> j.dueDt),
+    anyPinnedStart: jobResults.some(j=> j.startPinned),
+    // Item ที่กำหนดวันเริ่มไว้แต่เริ่มจริงไม่ได้ตามนั้น (คนของหน่วยแรกยังติดงานอื่น)
+    delayedStarts: jobResults.filter(j=> j.startDelayHours > 0.01).length,
     missingRate: jobResults.reduce((s,j)=> s + j.main.concat(j.extra).filter(r=> r.rate == null).length, 0),
     bottleneck
   };
@@ -2887,15 +2939,22 @@ function planExportExcel(){
     ['คาดว่าเสร็จทั้งแผน', planFmtDateTime(plan.finishDt)],
     ['สถานะเทียบกำหนดเสร็จ', plan.dueStatus ? planDueText(plan.dueStatus) : (plan.dueDt ? '—' : 'ยังไม่ได้กำหนด')],
     ['Item ที่ทำไม่ทันกำหนด (รายการ)', plan.lateJobs],
+    ['Item ที่กำหนดวันเริ่มเอง (รายการ)', plan.jobs.filter(j=> j.startPinned).length],
     ['ขั้นตอนคอขวด', plan.bottleneck ? (plan.bottleneck.row.step.dept + ' (' + plan.bottleneck.job.item + ')') : '—'],
     ['ขั้นตอนที่ไม่มีอัตราการผลิต (รายการ)', plan.missingRate],
     [],
-    ['กำหนดเสร็จรายไอเทม'],
-    ['ลำดับ','รหัส Item','กำหนดเสร็จ','ที่มาของกำหนด','คาดว่าเสร็จ','เร็ว(+)/ช้า(-) กว่ากำหนด (วันทำงาน)','สถานะ']
+    ['วันเริ่ม–วันเสร็จรายไอเทม'],
+    ['ลำดับ','รหัส Item','วันเริ่มที่กำหนด','ที่มาของวันเริ่ม','เริ่มจริงตามแผน','กำหนดเสร็จ','ที่มาของกำหนด','คาดว่าเสร็จ','เร็ว(+)/ช้า(-) กว่ากำหนด (วันทำงาน)','สถานะ']
   ];
   plan.jobs.forEach((jp,i)=>{
     summaryRows.push([
       i+1, jp.job.item,
+      jp.startPinned ? planFmtDate(jp.startIso) : '—',
+      jp.startPinned ? (jp.startDelayHours > 0.01
+            ? 'กำหนดวันเริ่มเอง (เริ่มจริงช้ากว่า ' + planRound2(jp.startDelayHours/plan.hpd) + ' วันทำงาน)'
+            : 'กำหนดวันเริ่มเอง')
+        : 'ตามลำดับในแผน',
+      jp.start_dt ? planFmtDateTime(jp.start_dt) : '—',
       jp.dueIso ? planFmtDate(jp.dueIso) : '—',
       jp.dueIso ? (jp.job.dueIso ? 'กำหนดของ Item นี้เอง' : 'ตามใบสั่งผลิต') : '—',
       jp.end_dt ? planFmtDateTime(jp.end_dt) : '—',
@@ -2998,7 +3057,8 @@ function planSnapshotCurrent(){
     capacity: planState.capacity,
     workers: planState.workers,
     jobs: planValidJobs().map(j=> ({
-      item: j.item, qty: j.qty, dueIso: j.dueIso || '', order: j.order || [], manualSteps: j.manualSteps || [],
+      item: j.item, qty: j.qty, startIso: j.startIso || '', dueIso: j.dueIso || '',
+      order: j.order || [], manualSteps: j.manualSteps || [],
       overrides: j.overrides || {}
     }))
   };
@@ -3044,6 +3104,8 @@ function planApplySnapshotToState(entry){
     uid: ++planJobUid,
     item: j.item || '',
     qty: j.qty > 0 ? j.qty : 1,
+    // แผนที่บันทึกไว้ก่อนมีช่องวันเริ่มรายไอเทม จะไม่มีค่านี้ = ไล่ตามลำดับในแผนเหมือนเดิม
+    startIso: j.startIso || '',
     dueIso: j.dueIso || '',
     steps: j.item ? buildPlanSteps(j.item, j.order || [], j.manualSteps || []) : [],
     order: j.order || [],
@@ -3194,6 +3256,12 @@ function renderPlanner(){
   /** ป้ายสรุปสถานะกำหนดเสร็จ ใช้ทั้งหัวใบ Item หัวกลุ่มในไทม์ไลน์ และตารางสรุป */
   const dueBadge = (dueIso, st)=> !dueIso ? '' :
     `<span class="plan-due-badge${st ? (st.late ? ' late' : ' ok') : ''}">กำหนดเสร็จ ${planFmtDate(dueIso)}${st ? ' · ' + planDueText(st) : ''}</span>`;
+  /** ป้ายวันเริ่มที่กำหนดให้ Item นั้นเอง — บอกด้วยว่าเริ่มได้ตามที่กำหนด หรือถูกคิวคนดันให้ช้ากว่า */
+  const startBadge = (jp)=> !jp.startPinned ? '' :
+    `<span class="plan-start-badge${jp.startDelayHours > 0.01 ? ' late' : ''}" title="${jp.startDelayHours > 0.01
+        ? 'กำหนดให้เริ่ม ' + planFmtDate(jp.startIso) + ' แต่คนของหน่วยแรกยังติดงานอื่นอยู่ จึงเริ่มได้จริง ' + planFmtDateTime(jp.start_dt)
+        : 'Item นี้เริ่มตามวันที่กำหนดไว้เอง ไม่ได้อ้างอิงลำดับหรือวันเสร็จของ Item ก่อนหน้า'}">เริ่ม ${planFmtDate(jp.startIso)}${
+        jp.startDelayHours > 0.01 ? ' · เริ่มจริงช้ากว่า ' + fmtNum(jp.startDelayHours/plan.hpd,1) + ' วัน' : ' · กำหนดเอง'}</span>`;
 
   const kpis = [
     {label:'Item ในแผน', value:fmtNum(plan.jobs.length), unit:'รายการ',
@@ -3368,6 +3436,7 @@ function renderPlanner(){
           <span class="plan-job-no">#${i+1}</span>
           <span class="plan-job-item">${escapeHtml(job.item)}</span>
           <span class="plan-job-dates">${jp.start_dt ? planFmtDateTime(jp.start_dt) + ' → ' + planFmtDateTime(jp.end_dt) : ''}</span>
+          ${startBadge(jp)}
           ${dueBadge(jp.dueIso, jp.due)}
         </div>
         <div class="plan-job-qty">
@@ -3615,7 +3684,7 @@ function renderPlanner(){
         ${plan.jobs.map((jp,i)=>{
             // เส้นกำหนดเสร็จของ Item นี้ วาดซ้ำในทุกแท่งของกลุ่ม จะได้เทียบได้ทุกขั้นตอนว่าเลยเส้นตายไปหรือยัง
             const dueMark = tlDueMark(jp.dueDt, jp.end_dt, jp.dueIso);
-            return `<div class="plan-tl-job">#${i+1} ${escapeHtml(jp.job.item)}${dueBadge(jp.dueIso, jp.due)}</div>`
+            return `<div class="plan-tl-job">#${i+1} ${escapeHtml(jp.job.item)}${startBadge(jp)}${dueBadge(jp.dueIso, jp.due)}</div>`
               + jp.main.map(r=> tlRow(r, false, dueMark)).join('')
               + (jp.extra.length ? `<div class="plan-tl-sep">ขั้นตอนแยก — ทำเมื่อไรก็ได้ ไม่ได้ต่อจากขั้นตอนใด จึงวาดจากจุดเริ่มของ Item นั้น</div>` + jp.extra.map(r=> tlRow(r, true, dueMark)).join('') : '');
           }).join('')}
@@ -3669,15 +3738,17 @@ function renderPlanner(){
     const h = planWorkingHoursBetween(jp.start_dt, jp.end_dt, plan.hpd, plan.shiftMin);
     return (!mx || h > mx.h) ? {h, item: jp.job.item} : mx;
   }, null);
-  // ตารางสรุปว่า Item ไหนทันกำหนด ไหนไม่ทัน — ตัวเลขชัดๆ ควบคู่กับเส้นชี้บ่งบนไทม์ไลน์
-  const dueTableHtml = !plan.anyDue ? `
-      <div class="plan-due-none">ยังไม่ได้กรอกกำหนดเสร็จ — ใส่ “กำหนดเสร็จ (ทั้งใบสั่งผลิต)” ด้านบน หรือกรอกกำหนดของแต่ละ Item ในกล่องรายการ แล้วไทม์ไลน์จะขึ้นเส้นชี้บ่งพร้อมบอกว่าเสร็จก่อนกำหนดหรือเกินกำหนดกี่วัน</div>`
+  // ตารางสรุปวันเริ่ม–วันเสร็จของแต่ละ Item และใบไหนทันกำหนด ไหนไม่ทัน — ตัวเลขชัดๆ ควบคู่กับเส้นชี้บ่งบนไทม์ไลน์
+  const dueTableHtml = (!plan.anyDue && !plan.anyPinnedStart) ? `
+      <div class="plan-due-none">ยังไม่ได้กรอกวันเริ่มหรือกำหนดเสร็จรายไอเทม — ใส่ “กำหนดเสร็จ (ทั้งใบสั่งผลิต)” ด้านบน หรือกรอก <b>วันเริ่ม</b>/<b>กำหนดเสร็จ</b> ของแต่ละ Item ในกล่องรายการ แล้วจะได้ตารางเทียบวันเริ่ม–วันเสร็จรายไอเทม พร้อมเส้นชี้บ่งกำหนดส่งบนไทม์ไลน์</div>`
     : `
       <div class="table-wrap" style="margin-top:14px;">
         <table class="plan-due-table">
           <thead>
             <tr>
               <th>Item</th>
+              <th>วันเริ่มที่กำหนด</th>
+              <th>เริ่มจริงตามแผน</th>
               <th>กำหนดเสร็จ</th>
               <th>คาดว่าเสร็จ</th>
               <th class="num">เร็ว/ช้ากว่ากำหนด (วันทำงาน)</th>
@@ -3687,18 +3758,22 @@ function renderPlanner(){
           <tbody>
             ${plan.jobs.map((jp,i)=> `<tr>
               <td class="mono">#${i+1} ${escapeHtml(jp.job.item)}</td>
+              <td class="mono">${jp.startPinned ? planFmtDate(jp.startIso) : '<span class="plan-src">ตามลำดับในแผน</span>'}</td>
+              <td class="mono">${jp.start_dt ? planFmtDateTime(jp.start_dt) + (jp.startDelayHours > 0.01 ? ' <span class="plan-src guess">· ช้ากว่าที่กำหนด ' + fmtNum(jp.startDelayHours/plan.hpd,2) + ' วัน</span>' : '') : '—'}</td>
               <td class="mono">${jp.dueIso ? planFmtDate(jp.dueIso) + (jp.job.dueIso ? '' : ' <span class="plan-src">· ตามใบสั่งผลิต</span>') : '—'}</td>
               <td class="mono">${jp.end_dt ? planFmtDateTime(jp.end_dt) : '—'}</td>
               <td class="num mono">${jp.due ? (jp.due.late ? '-' : '+') + fmtNum(jp.due.days,2) : '—'}</td>
               <td>${jp.due ? `<span class="pill ${jp.due.late ? 'bad' : 'good'}">${planDueText(jp.due)}</span>` : '<span class="plan-src">ยังไม่มีกำหนด</span>'}</td>
             </tr>`).join('')}
-            ${plan.dueDt ? `<tr class="plan-tot">
+            <tr class="plan-tot">
               <td class="mono">ทั้งแผน (ทุก Item)</td>
-              <td class="mono">${planFmtDate(plan.dueIso)}</td>
+              <td class="mono">${planFmtDate(plan.startIso)}</td>
+              <td class="mono">${planFmtDateTime(plan.startDt)}</td>
+              <td class="mono">${plan.dueDt ? planFmtDate(plan.dueIso) : '—'}</td>
               <td class="mono">${planFmtDateTime(plan.finishDt)}</td>
               <td class="num mono">${plan.dueStatus ? (plan.dueStatus.late ? '-' : '+') + fmtNum(plan.dueStatus.days,2) : '—'}</td>
-              <td>${plan.dueStatus ? `<span class="pill ${plan.dueStatus.late ? 'bad' : 'good'}">${planDueText(plan.dueStatus)}</span>` : '—'}</td>
-            </tr>` : ''}
+              <td>${plan.dueStatus ? `<span class="pill ${plan.dueStatus.late ? 'bad' : 'good'}">${planDueText(plan.dueStatus)}</span>` : '<span class="plan-src">ยังไม่มีกำหนด</span>'}</td>
+            </tr>
           </tbody>
         </table>
       </div>`;
@@ -3709,7 +3784,7 @@ function renderPlanner(){
         <h2>สรุปภาพรวม — Lead time รายไอเทม</h2>
         <button class="plan-collapse" data-showpanel="lead">▾ ซ่อน</button>
       </div>
-      <div class="panel-note">${plan.anyDue ? '<b>เส้นประแนวตั้ง</b>คือกำหนดเสร็จ · แถบลายเฉียง<b style="color:var(--good);">เขียว</b>คือเวลาที่ยังเหลือก่อนถึงกำหนด ส่วนลาย<b style="color:var(--bad);">แดง</b>คือช่วงที่ทำเลยกำหนดไปแล้ว · ' : ''}หนึ่งเส้นต่อหนึ่ง Item — ตั้งแต่ขั้นตอนแรกเริ่มลงมือ จนขั้นตอนสุดท้ายของ Item นั้นเสร็จ ใช้แกนเวลาทำงานเดียวกับไทม์ไลน์ด้านบน จึงเทียบกันได้ว่า Item ไหนกินช่วงไหนของแผนและยาวกว่ากันเท่าไร (นับเฉพาะสายหลัก ขั้นตอนแยกไม่ผูกวันที่จึงไม่นับ)</div>
+      <div class="panel-note">${plan.anyDue ? '<b>เส้นประแนวตั้ง</b>คือกำหนดเสร็จ · แถบลายเฉียง<b style="color:var(--good);">เขียว</b>คือเวลาที่ยังเหลือก่อนถึงกำหนด ส่วนลาย<b style="color:var(--bad);">แดง</b>คือช่วงที่ทำเลยกำหนดไปแล้ว · ' : ''}หนึ่งเส้นต่อหนึ่ง Item — ตั้งแต่ขั้นตอนแรกเริ่มลงมือ จนขั้นตอนสุดท้ายของ Item นั้นเสร็จ ใช้แกนเวลาทำงานเดียวกับไทม์ไลน์ด้านบน จึงเทียบกันได้ว่า Item ไหนกินช่วงไหนของแผนและยาวกว่ากันเท่าไร (นับเฉพาะสายหลัก ขั้นตอนแยกไม่ผูกวันที่จึงไม่นับ) · ตารางด้านล่างสรุป<b>วันเริ่ม–วันเสร็จของแต่ละ Item</b> เทียบกับวันที่กำหนดไว้เอง</div>
       <div class="plan-timeline" style="--tl-grid:${tlGridPct}%;">
         ${tlAxisHtml}
         ${leadRows}
@@ -3747,10 +3822,13 @@ function renderPlanner(){
             : 'ชื่อที่กรอกไว้จะถูกบันทึกและส่งออกไปกับแผน แต่โหมด “ทำจบทีละขั้น” ไม่ได้คิดคิวของแต่ละคน — เปลี่ยนเป็นโหมดส่งต่อระหว่างทำถ้าต้องการให้คิวคนมีผลกับเวลา'}</li>
         <li><b>ซ่อน/แสดงแต่ละส่วน</b> — แถบ “แสดง:” ด้านบนสุดเปิด-ปิดได้ทีละส่วน (สรุปตัวเลข / รายการ Item / กำลังคน / ไทม์ไลน์ / สรุป Lead time) จะเหลือดูแค่ส่วนเดียวก็ได้ · Item แต่ละใบพับเก็บแยกกันได้ด้วยปุ่ม “พับ” ที่หัวใบ · การตั้งค่านี้เป็นของเครื่องนี้เท่านั้น ไม่ถูกบันทึกไปกับแผนหรือลิงค์ที่แชร์</li>
         <li><b>กำหนดเสร็จ</b> — ใส่กำหนดส่งได้สองระดับ: ทั้งใบสั่งผลิต (ช่องด้านบน) และรายไอเทม (ช่องในกล่องรายการ Item) ไอเทมที่ไม่ได้กรอกกำหนดของตัวเองจะใช้กำหนดของทั้งใบ · ถือว่าต้องเสร็จภายใน<b>เวลาเลิกงาน</b>ของวันนั้น ถ้ากำหนดตกวันอาทิตย์จะถอยไปเป็นเวลาเลิกงานของวันเสาร์ · ไทม์ไลน์จะขึ้น<b>เส้นประแนวตั้ง</b>ตรงกำหนดเสร็จ สีเขียวคือทั้ง Item จบก่อนเส้น สีแดงคือมีงานล้ำเลยเส้นไป และส่วนต่างวัดเป็นวันทำงานแบบเดียวกับแกนเวลา (ไม่นับกลางคืนกับวันอาทิตย์) · กำหนดเสร็จไม่มีผลกับการคำนวณเวลา เป็นเส้นเทียบอย่างเดียว แก้แล้วเห็นผลทันทีโดยไม่ต้องกดคำนวณใหม่</li>
+        <li><b>วันเริ่มรายไอเทม</b> — ช่อง <b>วันเริ่ม</b> ในกล่องรายการ Item ใช้กับ Item ที่<b>ไม่ต้องการให้อ้างอิงลำดับ/วันเสร็จของ Item ก่อนหน้า</b>: กรอกไว้แล้ว Item นั้นจะเริ่มที่<b>ต้นกะของวันที่กรอก</b>ทันที ไม่ว่าจะอยู่ลำดับที่เท่าไรในแผน (ถ้ากรอกตรงวันอาทิตย์จะเลื่อนเป็นต้นกะของวันจันทร์) · ปล่อยว่างไว้ Item นั้นยังไล่ตามลำดับในแผนตามปกติ ${plan.overlap
+            ? 'ทั้งนี้วันเริ่มที่กำหนดเป็น<b>จุดเริ่มเร็วที่สุด</b> ถ้าคนของหน่วยแรกยังติดงานอื่นอยู่ งานจะเริ่มได้จริงช้ากว่านั้น ระบบจะขึ้นป้ายบอกส่วนต่างไว้ที่หัวใบ Item และในตารางสรุปด้านล่าง'
+            : 'ในโหมดทำจบทีละขั้น คิวจะถูกดึงไปเริ่มที่วันนั้นเลย Item ที่อยู่ถัดไปในลำดับจึงเดินต่อจาก Item ใบนี้'}${plan.delayedStarts ? ' · ตอนนี้มี <b>' + fmtNum(plan.delayedStarts) + '</b> Item ที่เริ่มจริงช้ากว่าวันที่กำหนดไว้' : ''} · ถ้ากรอกวันเริ่มไว้ก่อน “เริ่มผลิตวันที่” ของทั้งใบ จุดตั้งต้นของแผนจะถอยไปตามวันนั้นให้เอง</li>
         <li><b>Lead time รายไอเทม</b> — แผงล่างสุดวัดจากขั้นตอนแรกของ Item นั้นเริ่มลงมือ จนขั้นตอนสุดท้ายเสร็จ (นับเฉพาะเวลาทำงาน) ซึ่งยาวกว่าผลรวมชั่วโมงเดินเครื่องเสมอ ส่วนต่างคือเวลารอของจากหน่วยก่อนหน้าและรอคิวคน</li>
         <li><b>ลำดับ Item</b> — ${plan.overlap
             ? 'ทุก Item เริ่มพร้อมกันได้ถ้ากำลังคนพอ ลำดับในแผนใช้ตัดสินเฉพาะตอนงานพร้อมพร้อมกันแล้วต้องแย่งคนกัน (Item ที่อยู่บนกว่าได้ก่อน)'
-            : 'Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)'} สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง</li>
+            : 'Item ขึ้นงานไล่ตามลำดับในแผน (Item ถัดไปเริ่มเมื่อ Item ก่อนหน้าเสร็จ)'} สลับลำดับด้วยปุ่ม ▲▼ ในกล่องรายการ Item ด้านบนได้ แล้วกดคำนวณอีกครั้ง · <b>ยกเว้น Item ที่กรอก “วันเริ่ม” ของตัวเองไว้</b> — ใบพวกนั้นยึดวันที่กรอกเป็นหลัก ไม่ได้อ้างอิงลำดับหรือวันเสร็จของ Item ก่อนหน้า</li>
         <li><b>ลำดับขั้นตอน</b> — ในชีตไม่มีคอลัมน์ลำดับขั้นตอน (step order) ระบบจึงใช้ลำดับมาตรฐานของสายหลัก: รีด → ปั๊ม → เปเปอร์ → ตัดยาง → ทากาว → เจียร์ → เจียร์(หยาบ) → เจียร์(ละเอียด) → เจาะ โดยเจียร์(หยาบ)/(ละเอียด) ทำเฉพาะบอลบางไซส์ — ปรับลำดับด้วยปุ่ม ▲▼ ได้</li>
         <li><b>Item ที่เป็นเซ็ต (หลายชิ้นส่วน)</b> — ถ้า Item เดียวกันมีมากกว่า 1 ชิ้นส่วน/วัตถุดิบผ่านหน่วยงานเดียวกัน (เช่น เจียร์บอล กับ เจียร์พิน ของเซ็ตลูกโบว์ลิ่ง) ระบบจะแยกเป็นคนละแถวให้อัตโนมัติตามชื่อวัตถุดิบ แล้วทำให้ครบทุกขั้นตอนของชิ้นส่วนหนึ่งก่อน จึงขึ้นชิ้นส่วนถัดไป (ไม่ทำสลับข้ามชิ้นส่วนกัน)</li>
         ${extraNote}
@@ -3912,13 +3990,16 @@ function refreshPlanner(){
       planCommitItemValue(job, inp.value);
     }else if(field === 'due'){
       job.dueIso = inp.value || '';
+    }else if(field === 'start'){
+      job.startIso = inp.value || '';
     }else{
       const v = parseFloat(inp.value);
       job.qty = (isNaN(v) || v <= 0) ? 1 : v;
     }
     planCloseItemDropdown();
-    // กำหนดเสร็จไม่ได้เปลี่ยนตัวเลขที่คำนวณไว้ ผลลัพธ์เดิมจึงยังใช้ได้ ไม่ต้องเตือนให้กดคำนวณใหม่
-    if(planState.computed && field !== 'due') planState.dirty = true;
+    // กำหนดเสร็จกับวันเริ่มไม่ได้เปลี่ยนชุดขั้นตอนของ Item และการจัดเวลาถูกคิดใหม่ทุกครั้งที่วาดผลอยู่แล้ว
+    // จึงเห็นผลทันทีโดยไม่ต้องเตือนให้กดคำนวณใหม่
+    if(planState.computed && field !== 'due' && field !== 'start') planState.dirty = true;
     renderPlanRows();
     renderPlanner();
   });
