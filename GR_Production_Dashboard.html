@@ -2183,17 +2183,27 @@ function buildPlanSteps(item, userOrder, manualDepts){
   steps = [...byDisplayKey.values()];
 
   // เติมขั้นตอนที่ผู้ใช้เพิ่มเอง — ข้ามหน่วยงานที่มีข้อมูลย้อนหลังจริงอยู่แล้ว (ไม่ว่าจะกี่ชิ้นส่วนก็ตาม)
+  // เก็บลำดับที่กดเพิ่มไว้ด้วย (manual_seq) เพื่อให้ขั้นตอนที่เพิ่มเองเรียงตามที่ผู้ใช้ใส่เข้ามา
   const usedDeptsForManual = new Set(steps.map(s=> s.dept));
-  (manualDepts || []).forEach(dept=>{
+  (manualDepts || []).forEach((dept, mi)=>{
     if(usedDeptsForManual.has(dept)) return;
-    steps.push(planManualStepShell(dept));
+    const shell = planManualStepShell(dept);
+    shell.manual_seq = mi;
+    steps.push(shell);
   });
 
   // จัดกลุ่มขั้นตอนตาม "ชิ้นส่วน" (ชื่อวัตถุดิบ) ก่อน แล้วค่อยเรียงขั้นตอนภายในชิ้นส่วนตาม STEP_ORDER
   // เพราะแต่ละชิ้นส่วนของเซ็ตต้องทำให้ครบตามลำดับของมันเองก่อน ค่อยขึ้นชิ้นส่วนถัดไป (ไม่สลับขั้นตอนข้ามชิ้นส่วนกัน)
   const byRoute = (a,b)=>{
     if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
-    if(a.rank == null) return a.dept.localeCompare(b.dept);
+    if(a.rank == null){
+      // ขั้นตอนแยกไม่มีลำดับมาตรฐานให้ยึด — ที่เพิ่มเองจึงเรียงตามลำดับที่กดเพิ่ม (เพิ่มก่อนอยู่บน)
+      // แล้วต่อท้ายขั้นตอนแยกที่มาจากข้อมูลย้อนหลัง ถ้าเรียงตามตัวอักษรเหมือนเดิม ลำดับที่ผู้ใช้ตั้งใจใส่จะสลับทันทีที่วาดใหม่
+      const ma = a.manual_seq, mb = b.manual_seq;
+      if((ma == null) !== (mb == null)) return ma == null ? -1 : 1;
+      if(ma != null) return ma - mb;
+      return a.dept.localeCompare(b.dept);
+    }
     return a.rank - b.rank || a.dept.localeCompare(b.dept);
   };
   const parts = new Map();
