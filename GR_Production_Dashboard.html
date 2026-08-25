@@ -610,6 +610,17 @@
   .plan-row-tools{display:flex;align-items:center;gap:6px;}
   .plan-row-hint{grid-column:2 / -1;font-size:11px;color:var(--bad);margin-top:-4px;}
   .plan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  /* ป้ายบอกว่าตอนนี้กำลังแก้แผนไหนที่บันทึกไว้ — ต้องเห็นชัดว่าปุ่ม "อัปเดต" จะไปเขียนทับอะไร */
+  .plan-open-tag{
+    margin-top:10px;font-size:12px;color:var(--text-dim);line-height:1.6;
+    border-left:3px solid var(--accent);padding:6px 10px;background:var(--surface-2);border-radius:0 8px 8px 0;
+  }
+  .plan-open-tag b{color:var(--accent);font-family:var(--mono);}
+  .plan-history-item.current{border-color:var(--accent);}
+  .plan-history-now{
+    font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-dim);
+    padding:1px 7px;border-radius:999px;margin-left:6px;
+  }
   .plan-calc-btn{font-weight:600;}
   .plan-stale{
     background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);
@@ -970,10 +981,12 @@
         <button class="connect-btn ghost" id="planAddBtn">+ เพิ่ม Item</button>
         <button class="connect-btn plan-calc-btn" id="planCalcBtn">⏱ คำนวณเวลาในการผลิต</button>
         <button class="connect-btn ghost" id="planExportBtn">📊 Export Excel</button>
+        <button class="connect-btn" id="planUpdateBtn" hidden>💾 อัปเดตแผนที่เปิดอยู่</button>
         <button class="connect-btn ghost" id="planSaveBtn">💾 บันทึกแผนนี้</button>
         <button class="connect-btn ghost" id="planHistoryBtn">🕑 ประวัติแผน</button>
         <button class="connect-btn ghost" id="planShareBtn">🔗 คัดลอกลิงค์แชร์</button>
       </div>
+      <div class="plan-open-tag" id="planOpenTag" hidden></div>
     </div>
 
     <div class="plan-history-overlay" id="planHistoryOverlay" style="display:none;">
@@ -982,7 +995,7 @@
           <h2>ประวัติแผนที่บันทึกไว้</h2>
           <button class="plan-move" id="planHistoryClose" title="ปิด">✕</button>
         </div>
-        <div class="panel-note">บันทึกไว้ในเบราว์เซอร์นี้เท่านั้น ไม่ได้ส่งขึ้น Google Sheet และไม่แชร์กับเครื่อง/เบราว์เซอร์อื่น</div>
+        <div class="panel-note">บันทึกไว้ที่ Google Sheet ผ่าน Apps Script — เห็นเหมือนกันทุกเครื่องที่ล็อกอินด้วยรหัสผ่านเดียวกัน · กด “โหลด” แล้วแก้ จากนั้นกด “อัปเดตแผนที่เปิดอยู่” เพื่อเขียนทับรายการเดิม</div>
         <div class="plan-history-list" id="planHistoryList"></div>
       </div>
     </div>
@@ -1754,6 +1767,10 @@ const planState = {
   // คนที่รับงานพร้อมกันได้มากกว่าหนึ่ง: ชื่อ -> {jobs} (ไม่ระบุ = 1 งาน) คิวของคนหนึ่งใช้ร่วมกันทุกหน่วยงาน
   workers: {},
   jobs: [],  // [{uid, item, qty, steps, order, overrides}] — overrides: stepKey (dept+material) -> {rate, stations, qty, startAt}
+  // แผนในประวัติที่กำลังเปิดแก้อยู่ (null = ยังไม่เคยบันทึก/ไม่ได้โหลดมาจากประวัติ)
+  // ปุ่ม "อัปเดตแผนที่เปิดอยู่" จะเขียนทับรายการนี้ ส่วน "บันทึกเป็นแผนใหม่" จะได้อีกรายการแยก
+  historyId: null,
+  historyLabel: '',
   computed: false,  // กดปุ่ม "คำนวณเวลาในการผลิต" ไปแล้วหรือยัง
   dirty: false,     // แก้รายการหลังคำนวณ — ผลลัพธ์ที่เห็นยังเป็นของรอบก่อน
   // เลือกดูเฉพาะส่วนที่สนใจ (ไม่ได้บันทึกไปกับแผน เป็นการตั้งค่าการมองของเครื่องนี้เท่านั้น)
@@ -3038,7 +3055,42 @@ function planSnapshotCurrent(){
   };
 }
 
-/** ปุ่ม "บันทึกแผนนี้" — เก็บสถานะปัจจุบันเป็นรายการใหม่ในประวัติ (ซิงค์ผ่าน Google Sheet) */
+/** ชื่อที่ใช้เรียกแผนหนึ่งในประวัติ — ลูกค้า + ใบสั่งผลิต + เวลาที่บันทึก */
+function planEntryLabel(entry){
+  const dt = new Date(entry.savedAt);
+  const when = isNaN(dt.getTime()) ? '' : planFmtDateTime(dt);
+  return (entry.customer || 'ไม่ระบุลูกค้า')
+    + (entry.po ? ' · PO ' + entry.po : '')
+    + (when ? ' · บันทึก ' + when : '');
+}
+
+/** จำว่าตอนนี้กำลังแก้แผนไหนในประวัติอยู่ (null = ยังไม่ผูกกับรายการใด) แล้วอัปเดตปุ่ม/ป้ายให้ตรง */
+function planMarkOpenPlan(entry){
+  planState.historyId = entry ? entry.id : null;
+  planState.historyLabel = entry ? planEntryLabel(entry) : '';
+  planRenderOpenPlanTag();
+}
+
+/** ปุ่ม "อัปเดต" กับป้ายบอกแผนที่เปิดอยู่ จะโผล่เฉพาะตอนที่แผนปัจจุบันผูกกับรายการในประวัติ
+ *  และเปลี่ยนคำบนปุ่มบันทึกเป็น "บันทึกเป็นแผนใหม่" ให้ชัดว่ากดแล้วจะได้อีกรายการ ไม่ใช่ทับของเดิม */
+function planRenderOpenPlanTag(){
+  const open = !!planState.historyId;
+  const tag = document.getElementById('planOpenTag');
+  const upd = document.getElementById('planUpdateBtn');
+  const save = document.getElementById('planSaveBtn');
+  if(upd) upd.hidden = !open;
+  if(save) save.textContent = open ? '💾 บันทึกเป็นแผนใหม่' : '💾 บันทึกแผนนี้';
+  if(tag){
+    tag.hidden = !open;
+    tag.innerHTML = open
+      ? 'กำลังแก้แผนที่บันทึกไว้: <b>' + escapeHtml(planState.historyLabel) + '</b><br>'
+        + '“อัปเดตแผนที่เปิดอยู่” = เขียนทับรายการนี้ · “บันทึกเป็นแผนใหม่” = เก็บเพิ่มอีกรายการแยกต่างหาก'
+      : '';
+  }
+}
+
+/** ปุ่ม "บันทึกแผนนี้" — เก็บสถานะปัจจุบันเป็นรายการใหม่ในประวัติ (ซิงค์ผ่าน Google Sheet)
+ *  บันทึกเสร็จแล้วผูกแผนปัจจุบันไว้กับรายการที่เพิ่งบันทึก จะได้กด "อัปเดต" ทับต่อได้เลยโดยไม่ต้องโหลดใหม่ */
 async function planSaveCurrentPlan(){
   if(!planValidJobs().length){
     alert('กรอกรายการ Item ก่อนถึงจะบันทึกแผนได้');
@@ -3047,11 +3099,50 @@ async function planSaveCurrentPlan(){
   const btn = document.getElementById('planSaveBtn');
   if(btn) btn.disabled = true;
   try{
-    await planHistoryPost({action:'save', entry: planSnapshotCurrent()});
+    const entry = planSnapshotCurrent();
+    await planHistoryPost({action:'save', entry});
+    planMarkOpenPlan(entry);
     await renderPlanHistoryList();
     alert('บันทึกเรียบร้อย');
   }catch(err){
     alert('บันทึกประวัติไม่สำเร็จ: ' + err.message);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+/** ปุ่ม "อัปเดตแผนที่เปิดอยู่" — เขียนทับรายการเดิมในประวัติ แทนที่จะได้แผนใหม่เพิ่มมาอีกอัน
+ *
+ *  ทำเป็น "บันทึกฉบับใหม่ให้ขึ้นชีตก่อน แล้วค่อยลบฉบับเก่า" ไม่ใช่ลบก่อนบันทึก เพราะถ้าเน็ตหลุด
+ *  ระหว่างทาง ลำดับนี้อย่างแย่ที่สุดคือเหลือรายการซ้ำให้ลบเอง (กู้คืนได้) ส่วนลำดับกลับกันคือแผนหายทั้งอัน */
+async function planUpdateSavedPlan(){
+  if(!planState.historyId){
+    alert('แผนนี้ยังไม่ได้ผูกกับรายการในประวัติ — กด “บันทึกแผนนี้” เพื่อเก็บเป็นแผนใหม่ก่อน');
+    return;
+  }
+  if(!planValidJobs().length){
+    alert('กรอกรายการ Item ก่อนถึงจะบันทึกแผนได้');
+    return;
+  }
+  if(!confirm('เขียนทับแผนที่บันทึกไว้ด้วยข้อมูลปัจจุบัน?\n\n' + planState.historyLabel)) return;
+  const btn = document.getElementById('planUpdateBtn');
+  const oldId = planState.historyId;
+  if(btn) btn.disabled = true;
+  try{
+    const entry = planSnapshotCurrent();
+    await planHistoryPost({action:'save', entry});
+    // ฉบับใหม่ขึ้นชีตแล้ว — ผูกแผนปัจจุบันเข้ากับฉบับใหม่ทันที ถ้าจากนี้พลาดก็แค่มีของซ้ำ ไม่ใช่ของหาย
+    planMarkOpenPlan(entry);
+    let warn = '';
+    try{
+      await planHistoryPost({action:'delete', id: oldId});
+    }catch(err){
+      warn = '\n\nแต่ลบฉบับเก่าไม่สำเร็จ (' + err.message + ') — ในประวัติจะเห็นสองรายการ ลบอันเก่าเองได้ด้วยปุ่ม ✕';
+    }
+    await renderPlanHistoryList();
+    alert('อัปเดตแผนเรียบร้อย' + warn);
+  }catch(err){
+    alert('อัปเดตแผนไม่สำเร็จ: ' + err.message + '\nแผนฉบับที่บันทึกไว้เดิมยังอยู่ครบ');
   }finally{
     if(btn) btn.disabled = false;
   }
@@ -3107,6 +3198,7 @@ function planLoadHistoryEntry(id){
   const entry = planHistoryCache.find(e=> e.id === id);
   if(!entry) return;
   planApplySnapshotToState(entry);
+  planMarkOpenPlan(entry);
   closePlanHistory();
   renderPlanRows();
   renderPlanner();
@@ -3114,6 +3206,8 @@ function planLoadHistoryEntry(id){
 async function planDeleteHistoryEntry(id){
   try{
     await planHistoryPost({action:'delete', id});
+    // ลบรายการที่กำลังเปิดแก้อยู่ = ไม่มีอะไรให้เขียนทับแล้ว ต้องซ่อนปุ่มอัปเดตไม่งั้นจะกดแล้วเด้ง error
+    if(planState.historyId === id) planMarkOpenPlan(null);
     await renderPlanHistoryList();
   }catch(err){
     alert('ลบประวัติไม่สำเร็จ: ' + err.message);
@@ -3141,9 +3235,10 @@ async function renderPlanHistoryList(){
     const when = isNaN(dt.getTime()) ? '—' : planFmtDateTime(dt);
     const items = (e.jobs || []).map(j=> j.item).filter(Boolean);
     const itemsLabel = items.length ? escapeHtml(items.slice(0,4).join(', ')) + (items.length > 4 ? ' …' : '') : '—';
-    return `<div class="plan-history-item">
+    const isOpen = e.id === planState.historyId;
+    return `<div class="plan-history-item${isOpen ? ' current' : ''}">
       <div class="plan-history-info">
-        <div><b>${escapeHtml(e.customer || 'ไม่ระบุลูกค้า')}</b>${e.po ? ' · PO ' + escapeHtml(e.po) : ''}</div>
+        <div><b>${escapeHtml(e.customer || 'ไม่ระบุลูกค้า')}</b>${e.po ? ' · PO ' + escapeHtml(e.po) : ''}${isOpen ? '<span class="plan-history-now">กำลังแก้อยู่</span>' : ''}</div>
         <div>${items.length} Item: ${itemsLabel}</div>
         <div>บันทึกเมื่อ ${when}</div>
       </div>
@@ -3205,6 +3300,9 @@ function planApplySharedFromHash(){
   try{ snapshot = planDecodeSnapshot(m[1]); }
   catch(e){ console.warn('อ่านลิงค์แผนที่แชร์มาไม่สำเร็จ', e); return false; }
   planApplySnapshotToState(snapshot);
+  // ลิงค์ที่แชร์มาพกสำเนาของแผนมาเต็มก้อน ไม่ได้แปลว่าคนเปิดเป็นเจ้าของรายการนั้นในประวัติ
+  // จึงไม่ผูกให้ กันกดอัปเดตแล้วไปทับแผนของคนที่แชร์มา — อยากเก็บก็กด "บันทึกแผนนี้" เป็นของตัวเอง
+  planMarkOpenPlan(null);
   showPlanner();
   renderPlanRows();
   renderPlanner();
@@ -3910,6 +4008,8 @@ function refreshPlanner(){
   document.getElementById('planCalcBtn').addEventListener('click', planCompute);
   document.getElementById('planExportBtn').addEventListener('click', planExportExcel);
   document.getElementById('planSaveBtn').addEventListener('click', planSaveCurrentPlan);
+  document.getElementById('planUpdateBtn').addEventListener('click', planUpdateSavedPlan);
+  planRenderOpenPlanTag();
   document.getElementById('planHistoryBtn').addEventListener('click', openPlanHistory);
   document.getElementById('planHistoryClose').addEventListener('click', closePlanHistory);
   document.getElementById('planShareBtn').addEventListener('click', ()=> planCopyShareLink(planSnapshotCurrent()));
