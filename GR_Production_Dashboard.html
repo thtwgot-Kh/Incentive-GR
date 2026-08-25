@@ -2196,7 +2196,6 @@ function buildPlanSteps(item, userOrder, manualDepts){
   if(userOrder && userOrder.length){
     orderedSteps.sort((a,b)=>{
       if((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
-      if(a.rank == null) return byRoute(a,b);
       const ia = userOrder.indexOf(a.key), ib = userOrder.indexOf(b.key);
       if(ia === -1 && ib === -1) return byRoute(a,b);
       if(ia === -1) return 1;
@@ -2210,7 +2209,7 @@ function buildPlanSteps(item, userOrder, manualDepts){
 function planFindJob(uid){ return planState.jobs.find(j=> j.uid === uid); }
 
 function planNewJob(){
-  return {uid: ++planJobUid, item:'', qty: 1000, dueIso:'', steps: [], order: [], overrides: {}, manualSteps: []};
+  return {uid: ++planJobUid, item:'', qty: 1000, dueIso:'', steps: [], order: [], overrides: {}, manualSteps: [], manualDeptDraft: ''};
 }
 /** เฉพาะแถวที่กรอกรหัส Item ไว้ — รวมถึง Item ใหม่ที่ยังไม่มีขั้นตอนจากประวัติ
  *  แต่มีขั้นตอนที่เพิ่มเองรออยู่ (หรือรอเพิ่ม) ก็ยังนับเป็นรายการในแผน */
@@ -3253,8 +3252,8 @@ function renderPlanner(){
       <div class="sub ${k.cls}">${k.sub}</div>
     </div>`).join('') + `</div>`;
 
-  // แถวของสายหลักเลื่อนลำดับได้ ส่วนขั้นตอนแยกไม่มีลำดับให้เลื่อน
-  const rowHtml = (r, job, no, lastNo)=>{
+  // แถวของสายหลักและขั้นตอนแยกเลื่อนลำดับได้ทั้งคู่ — แต่ละกลุ่มเลื่อนสลับได้เฉพาะภายในกลุ่มตัวเอง
+  const rowHtml = (r, job, no, lastNo, kind)=>{
     const c = getDeptColor(r.step.dept);
     const dept = escapeHtml(r.step.dept).replace(/"/g,'&quot;');
     const stepKey = escapeHtml(r.step.key).replace(/"/g,'&quot;');
@@ -3270,8 +3269,8 @@ function renderPlanner(){
     }
     const seq = no
       ? `<span class="plan-seq-no">${no}</span>
-          <button class="plan-move" data-move="up" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนขึ้น" ${no===1?'disabled':''}>▲</button>
-          <button class="plan-move" data-move="down" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนลง" ${no===lastNo?'disabled':''}>▼</button>`
+          <button class="plan-move" data-move="up" data-movekind="${kind}" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนขึ้น" ${no===1?'disabled':''}>▲</button>
+          <button class="plan-move" data-move="down" data-movekind="${kind}" data-job="${job.uid}" data-idx="${no-1}" title="เลื่อนลง" ${no===lastNo?'disabled':''}>▼</button>`
       : `<span class="plan-seq-no">—</span>`;
     return `<tr>
       <td><div class="plan-seq">${seq}</div></td>
@@ -3332,9 +3331,9 @@ function renderPlanner(){
 
   const jobHtml = (jp, i)=>{
     const job = jp.job;
-    const mainBody = jp.main.map((r,k)=> rowHtml(r, job, k+1, jp.main.length)).join('');
+    const mainBody = jp.main.map((r,k)=> rowHtml(r, job, k+1, jp.main.length, 'main')).join('');
     const extraBody = jp.extra.length
-      ? `<tr class="plan-sep"><td colspan="11">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก จึงไม่ผูกวันที่และไม่นับรวมในวันที่เสร็จ</td></tr>` + jp.extra.map(r=> rowHtml(r, job, 0, 0)).join('')
+      ? `<tr class="plan-sep"><td colspan="11">ขั้นตอนแยก — ไม่ได้อยู่ในลำดับสายหลัก จึงไม่ผูกวันที่และไม่นับรวมในวันที่เสร็จ (เลื่อนขึ้น/ลงได้เพื่อจัดลำดับที่แสดง)</td></tr>` + jp.extra.map((r,k)=> rowHtml(r, job, k+1, jp.extra.length, 'extra')).join('')
       : '';
     const totalRows = (jp.extra.length ? `
             <tr class="plan-tot">
@@ -3357,6 +3356,7 @@ function renderPlanner(){
     const manualAddHtml = `
       <div class="plan-manual-add">
         <input class="search-box plan-manual-dept-input" list="planDeptList-${job.uid}" data-job="${job.uid}"
+               value="${escapeHtml(job.manualDeptDraft || '').replace(/"/g,'&quot;')}"
                placeholder="ชื่อขั้นตอน/หน่วยงานที่จะเพิ่มเอง..." autocomplete="off">
         <datalist id="planDeptList-${job.uid}">${deptChoices.map(d=>`<option value="${escapeHtml(d).replace(/"/g,'&quot;')}"></option>`).join('')}</datalist>
         <button class="connect-btn ghost plan-manual-add-btn" data-job="${job.uid}">+ เพิ่มขั้นตอนเอง</button>
@@ -4050,6 +4050,7 @@ function refreshPlanner(){
         job.manualSteps.push(dept);
         job.steps = buildPlanSteps(job.item || null, job.order, job.manualSteps);
       }
+      job.manualDeptDraft = '';
       renderPlanner();
       return;
     }
@@ -4105,14 +4106,28 @@ function refreshPlanner(){
     if(!btn) return;
     const job = planFindJob(parseInt(btn.getAttribute('data-job'), 10));
     if(!job) return;
+    // สายหลักกับขั้นตอนแยกเลื่อนแยกกลุ่มกัน — กรองเฉพาะกลุ่มของปุ่มที่กด ไม่งั้น index จะเพี้ยน
+    // เวลาสองกลุ่มปนกันอยู่ใน job.steps เดิม (แต่ละชิ้นส่วน/วัตถุดิบเรียงขั้นตอนแยกต่อท้ายขั้นตอนสายหลักของมันเอง)
+    const isMain = btn.getAttribute('data-movekind') !== 'extra';
+    const sameKind = (x)=> isMain ? x.rank != null : x.rank == null;
+    const filtered = job.steps.filter(sameKind);
     const i = parseInt(btn.getAttribute('data-idx'), 10);
     const j2 = btn.getAttribute('data-move') === 'up' ? i-1 : i+1;
-    const mainLen = job.steps.filter(x=> x.rank != null).length;
-    if(j2 < 0 || j2 >= mainLen) return;   // ขั้นตอนแยกไม่มีลำดับ จึงสลับเข้าไปไม่ได้
-    const s = job.steps;
-    [s[i], s[j2]] = [s[j2], s[i]];
-    job.order = s.map(x=> x.key);
+    if(j2 < 0 || j2 >= filtered.length) return;
+    [filtered[i], filtered[j2]] = [filtered[j2], filtered[i]];
+    let fi = 0;
+    job.steps = job.steps.map(x=> sameKind(x) ? filtered[fi++] : x);
+    job.order = job.steps.map(x=> x.key);
     renderPlanner();
+  });
+  // เก็บข้อความที่พิมพ์ค้างไว้ในกล่อง "เพิ่มขั้นตอนเอง" ไว้ใน state (ไม่วาดใหม่ตอนพิมพ์)
+  // กันเหตุที่ระบบวาดผลลัพธ์ใหม่จากที่อื่น (เช่น รีเฟรชข้อมูลอัตโนมัติ) ระหว่างพิมพ์ แล้วข้อความที่พิมพ์ค้างหายไป
+  box.addEventListener('input', (e)=>{
+    const inp = e.target.closest('.plan-manual-dept-input');
+    if(!inp) return;
+    const job = planFindJob(parseInt(inp.getAttribute('data-job'), 10));
+    if(!job) return;
+    job.manualDeptDraft = inp.value;
   });
   // ใช้ change ไม่ใช่ input — ตารางถูกวาดใหม่ทุกครั้งที่ค่าเปลี่ยน ถ้าใช้ input จะหลุดโฟกัสทุกตัวอักษร
   box.addEventListener('change', (e)=>{
